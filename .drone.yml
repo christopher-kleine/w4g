@@ -1,0 +1,13 @@
+kind: pipeline
+name: hello-world
+type: docker
+
+steps:
+  - name: build-linux
+    image: docker.io/anihex/golang-opengl:1.18.2
+    commands:
+      - go build -ldflags "-X main.GitCommit=$(git describe --tags) -s -w" ./cmd/w4g
+  - name: build-windows
+    image: docker.io/anihex/golang-opengl:1.18.2
+    commands:
+      - GOOS=windows go build -ldflags "-X main.GitCommit=$(git describe --tags) -s -w" ./cmd/w4g
