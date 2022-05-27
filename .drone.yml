@@ -11,3 +11,10 @@ steps:
     image: docker.io/anihex/golang-opengl:1.18.2
     commands:
       - GOOS=windows go build -ldflags "-X main.GitCommit=$(git describe --tags) -s -w" ./cmd/w4g
+  - name: publish
+    image: plugins/github-release
+    api_key:
+      from_secret: drone_token
+    files:
+      - w4g
+      - w4g.exe
