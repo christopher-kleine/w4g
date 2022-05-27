@@ -27,7 +27,7 @@ func main() {
 		},
 		Copyright: "(c) 2022 by Christopher Kleine",
 		Commands: []*cli.Command{
-			commands.New(),
+			commands.Create(),
 			commands.Init(),
 			//commands.Watch(),
 			//commands.Web(),

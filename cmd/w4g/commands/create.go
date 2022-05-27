@@ -9,7 +9,7 @@ import (
 //go:embed templates
 var templates embed.FS
 
-func New() *cli.Command {
+func Create() *cli.Command {
 	return &cli.Command{
 		Name:      "create",
 		ArgsUsage: "<TEMPLATE> <PROJECT>",
