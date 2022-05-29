@@ -166,75 +166,53 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 }
 
 func (rt *Runtime) LineFB(x1, y1, x2, y2 int32) {
-	drawColors, _ := rt.env.Memory().ReadByte(rt.ctx, MemDrawColors)
-	dc0 := drawColors & 0xf
+	drawColors, _ := rt.env.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+	var dc0 uint8 = drawColors[0] & 0xf
 	if dc0 == 0 {
 		return
 	}
-	strokeColor := (dc0 - 1) & 0x3
+	var strokeColor uint8 = (dc0 - 1) & 0x3
 
 	if y1 > y2 {
 		x1, x2 = x2, x1
 		y1, y2 = y2, y1
 	}
 
-	dx := int32(math.Abs(float64(x2 - x1)))
+	var dx int32 = int32(math.Abs(float64(x2 - x1)))
 	var sx int32 = -1
 	if x1 < x2 {
-		sx = -1
+		sx = 1
 	}
-	dy := y2 - y1
-	e1 := -dy
+	var dy int32 = y2 - y1
+	var err int32 = -dy
 	if dx > dy {
-		e1 = dx
+		err = dx
 	}
-	e1 = e1 / 2
+	err = err / 2
 
 	for {
 		rt.PointUnclippedFB(strokeColor, x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}
-		e2 := e1
+		e2 := err
 		if e2 > -dx {
-			e1 -= dy
+			err -= dy
 			x1 += sx
 		}
 		if e2 < dy {
-			e1 += dx
+			err += dx
 			y1++
 		}
 	}
 }
 
-func (rt *Runtime) HLineFB(x, y, l int32) {
-	if (x >= 160) || (y >= 160) || (y < 0) {
-		return
-	}
-	if x < 0 {
-		l = l - x
-		x = 0
-	}
-	if l+x > 160 {
-		l = 160 - x
-	}
-	for currX := x; currX < x+l; currX++ {
-	}
+func (rt *Runtime) HLineFB(x, y, endX int32) {
+	rt.LineFB(x, y, x+endX, y)
 }
 
-func (rt *Runtime) VLineFB(x, y, l int32) {
-	if (x >= 160) || (y >= 160) || (x < 0) {
-		return
-	}
-	if y < 0 {
-		l = l - x
-		y = 0
-	}
-	if l+y > 160 {
-		l = 160 - y
-	}
-	for currY := x; currY < x+l; currY++ {
-	}
+func (rt *Runtime) VLineFB(x, y, endY int32) {
+	rt.LineFB(x, y, x, y+endY)
 }
 
 func (rt *Runtime) PointFB(color byte, x, y int32) {
@@ -251,5 +229,24 @@ func (rt *Runtime) PointFB(color byte, x, y int32) {
 func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
 	if x >= 0 && x < 160 && y >= 0 && y < 160 {
 		rt.PointFB(colorIndex, x, y)
+	}
+}
+
+func (rt *Runtime) TextFB(txt string, x, y int32) {
+	currX := x
+	currY := y
+	for _, letter := range txt {
+		switch letter {
+		case 0:
+			return
+
+		case '\n':
+			currX = x
+			currY += 8
+
+		default:
+			rt.BlitFB(font, currX, currY, 8, 8, 0, (letter-32)<<3, 8, false, false, false, false)
+			currX += 8
+		}
 	}
 }

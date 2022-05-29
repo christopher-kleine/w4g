@@ -34,27 +34,14 @@ func (rt *Runtime) Rect(x, y, w, h int32) {
 }
 
 func (rt *Runtime) Text(txt, x, y int32) {
-	currX := x
-	currY := y
-	for _, letter := range rt.getString(txt) {
-		switch letter {
-		case 0:
-			return
-
-		case '\n':
-			currX = x
-			currY += 8
-
-		default:
-			rt.BlitFB(font, currX, currY, 8, 8, 0, (letter-32)<<3, 8, false, false, false, false)
-			currX += 8
-		}
-	}
+	rt.TextFB(rt.getString(txt), x, y)
 }
 
 func (rt *Runtime) TextUTF8(textPtr, byteLength, x, y int32) {
 	// const text = new Uint8Array(this.memory.buffer, textPtr, byteLength);
 	// this.framebuffer.drawText(text, x, y);
+	text, _ := rt.env.Memory().Read(rt.ctx, uint32(textPtr), uint32(byteLength))
+	rt.TextFB(string(text), x, y)
 }
 
 func (rt *Runtime) getString(txt int32) string {
