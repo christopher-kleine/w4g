@@ -74,12 +74,13 @@ var (
 )
 
 type Runtime struct {
-	runtime wazero.Runtime
-	env     api.Module
-	cart    api.Module
-	ctx     context.Context
-	showFPS bool
-	Encoder encoders.Encoder
+	runtime  wazero.Runtime
+	env      api.Module
+	cart     api.Module
+	cartName string
+	ctx      context.Context
+	showFPS  bool
+	Encoder  encoders.Encoder
 }
 
 func NewRuntime(showFPS bool) (*Runtime, error) {
@@ -124,14 +125,16 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 	return result, nil
 }
 
-func (rt *Runtime) LoadCart(code []byte) error {
+func (rt *Runtime) LoadCart(code []byte, name string) error {
 	var err error
 
+	rt.cartName = name
+
 	rt.env.Memory().Write(rt.ctx, MemPalette, []byte{
-		0xcf, 0xf8, 0xe0, 0,
-		0x6c, 0xc0, 0x86, 0,
-		0x50, 0x68, 0x30, 0,
-		0x21, 0x18, 0x07, 0,
+		0xcf, 0xf8, 0xe0, 0xff,
+		0x6c, 0xc0, 0x86, 0xff,
+		0x50, 0x68, 0x30, 0xff,
+		0x21, 0x18, 0x07, 0xff,
 	})
 
 	rt.cart, err = rt.runtime.InstantiateModuleFromCode(rt.ctx, code)
@@ -157,9 +160,35 @@ func (rt *Runtime) Close() {
 	}
 }
 
+func (rt *Runtime) Screenshot(screen *ebiten.Image) {
+	udir, err := os.UserHomeDir()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	fname := fmt.Sprintf("%s_%v.png", rt.cartName, time.Now().Format("2006-01-02_15-04-05"))
+	fname = filepath.Join(udir, fname)
+	f, err := os.Create(fname)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	err = png.Encode(f, screen)
+	if err != nil {
+		log.Println(err)
+	}
+}
+
 func (rt *Runtime) Draw(screen *ebiten.Image) {
 	fmt.Print("\r")
 	rt.RenderFB(screen)
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
+		rt.Screenshot(screen)
+	}
+
 	if rt.showFPS {
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.f", ebiten.CurrentFPS()), 0, 0)
 	}

@@ -20,25 +20,25 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 	palette, _ := rt.env.Memory().Read(rt.ctx, MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
-			A: palette[3],
+			A: 0xff,
 			R: palette[2],
 			G: palette[1],
 			B: palette[0],
 		},
 		color.RGBA{
-			A: palette[3+4],
+			A: 0xff,
 			R: palette[2+4],
 			G: palette[1+4],
 			B: palette[0+4],
 		},
 		color.RGBA{
-			A: palette[3+8],
+			A: 0xff,
 			R: palette[2+8],
 			G: palette[1+8],
 			B: palette[0+8],
 		},
 		color.RGBA{
-			A: palette[3+12],
+			A: 0xff,
 			R: palette[2+12],
 			G: palette[1+12],
 			B: palette[0+12],
