@@ -3,10 +3,16 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"image/png"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/christopher-kleine/w4g/pkg/encoders"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -189,10 +195,17 @@ func (rt *Runtime) Draw(screen *ebiten.Image) {
 		rt.Screenshot(screen)
 	}
 
+	if rt.Encoder.IsRunning() {
+		rt.Encoder.Encode(screen)
+	}
+
 	if rt.showFPS {
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.f", ebiten.CurrentFPS()), 0, 0)
 	}
-	//screen.DrawImage(img, nil)
+
+	if rt.Encoder.IsRunning() {
+		ebitenutil.DebugPrintAt(screen, "REC", 160-24, 0)
+	}
 }
 
 func (rt *Runtime) KeyState(keys map[ebiten.Key]byte) byte {
@@ -211,6 +224,14 @@ func (rt *Runtime) Update() error {
 	SystemFlags, _ := rt.env.Memory().ReadByte(rt.ctx, MemSystemFlags)
 	if SystemFlags&FlagPreserveScreen == 0 {
 		rt.ClearFB()
+	}
+
+	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {
+		if rt.Encoder.IsRunning() {
+			rt.Encoder.Stop()
+		} else {
+			rt.Encoder.Start(rt.cartName)
+		}
 	}
 
 	rt.env.Memory().WriteByte(rt.ctx, MemGamepads+0*SizeGamepads, rt.KeyState(Player1Keys))
