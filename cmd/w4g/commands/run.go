@@ -30,19 +30,6 @@ func Run() *cli.Command {
 				Usage:     "Starts a WASM-4 cart in the native client",
 				Action:    runNative,
 				ArgsUsage: "<CART>",
-				UsageText: "DASD",
-				Flags: []cli.Flag{
-					&cli.BoolFlag{
-						Name:  "fps",
-						Usage: "Show the current FPS",
-						Value: false,
-					},
-					&cli.IntFlag{
-						Name:  "scale",
-						Usage: "Sets the window scale compared to the game",
-						Value: 5,
-					},
-				},
 			},
 		},
 	}

@@ -14,10 +14,22 @@ var (
 
 func main() {
 	app := &cli.App{
-		Name:                 "w4g",
-		Usage:                "Chris' version of the WASM-4 CLI",
-		Version:              GitCommit,
-		Action:               commands.SurfAction,
+		Name:    "w4g",
+		Usage:   "Chris' version of the WASM-4 CLI",
+		Version: GitCommit,
+		Action:  commands.SurfAction,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "fps",
+				Usage: "Show the current FPS",
+				Value: false,
+			},
+			&cli.IntFlag{
+				Name:  "scale",
+				Usage: "Sets the window scale compared to the game",
+				Value: 5,
+			},
+		},
 		EnableBashCompletion: true,
 		Authors: []*cli.Author{
 			{

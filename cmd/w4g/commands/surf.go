@@ -13,5 +13,9 @@ func Surf() *cli.Command {
 }
 
 func SurfAction(c *cli.Context) error {
+	if c.Args().Len() > 0 {
+		return runNative(c)
+	}
+
 	return nil
 }
