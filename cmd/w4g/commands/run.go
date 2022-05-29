@@ -3,11 +3,13 @@ package commands
 import (
 	"errors"
 	"os"
+	"path/filepath"
 
+	"github.com/christopher-kleine/lorca"
+	"github.com/christopher-kleine/w4g/pkg/encoders"
 	"github.com/christopher-kleine/w4g/pkg/runtime"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/urfave/cli/v2"
-	"github.com/zserge/lorca"
 )
 
 func Run() *cli.Command {
@@ -35,6 +37,11 @@ func Run() *cli.Command {
 						Usage: "Show the current FPS",
 						Value: false,
 					},
+					&cli.IntFlag{
+						Name:  "scale",
+						Usage: "Sets the window scale compared to the game",
+						Value: 5,
+					},
 				},
 			},
 		},
@@ -58,22 +65,27 @@ func runNative(c *cli.Context) error {
 		return errors.New("no file provided")
 	}
 
-	rt, err := runtime.NewRuntime(true)
+	showFPS := c.Bool("fps")
+	scale := c.Int("scale")
+
+	rt, err := runtime.NewRuntime(showFPS)
 	if err != nil {
 		return err
 	}
+
+	rt.Encoder = encoders.NewY4M()
 
 	code, err := os.ReadFile(cart)
 	if err != nil {
 		return err
 	}
 
-	err = rt.LoadCart(code)
+	err = rt.LoadCart(code, filepath.Base(cart))
 	if err != nil {
 		return err
 	}
 
-	ebiten.SetWindowSize(160*5, 160*5)
+	ebiten.SetWindowSize(160*scale, 160*scale)
 	err = ebiten.RunGame(rt)
 
 	return err
