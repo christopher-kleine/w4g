@@ -3,10 +3,10 @@ module github.com/christopher-kleine/w4g
 go 1.17
 
 require (
+	github.com/christopher-kleine/lorca v0.1.11-0.20220529163957-708fc256dcb5
 	github.com/hajimehoshi/ebiten/v2 v2.3.2
 	github.com/tetratelabs/wazero v0.0.0-20220523092326-5ed31d3c495d
 	github.com/urfave/cli/v2 v2.3.0
-	github.com/zserge/lorca v0.1.10
 )
 
 require (
@@ -23,5 +23,3 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/sys v0.0.0-20220408201424-a24fb2fb8a0f // indirect
 )
-
-replace github.com/zserge/lorca => github.com/christopher-kleine/lorca v0.1.11-0.20220525143537-6fc03868ffde
