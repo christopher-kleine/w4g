@@ -12,14 +12,6 @@ func (rt *Runtime) BlitSub(spr, x, y, w, h, srcX, srcY, stride, f int32) {
 	flipY := f&4 == 4
 	rotate := f&8 == 8
 
-	// log.Printf("spr: %v x: %v y: %v w: %v h: %v srcX: %v srcY: %v stride: %v f %v",
-	// 	len(sprite),
-	// 	x,
-	// 	y,
-	// 	w, h,
-	// 	srcX, srcY, stride, f,
-	// )
-
 	rt.BlitFB(sprite, x, y, w, h, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
 }
 

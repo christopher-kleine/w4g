@@ -112,6 +112,7 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 		ExportFunction("diskr", result.DiskR).
 		// Other
 		ExportFunction("trace", result.Trace).
+		ExportFunction("traceUtf8", result.TraceUtf8).
 		// Memory
 		ExportMemoryWithMax("memory", 1, 1).
 		Instantiate(result.ctx)
@@ -120,24 +121,18 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 		return result, err
 	}
 
-	// result.env.Memory().Write(result.ctx, MemPalette, []byte{
-	// 	0xcf, 0xf8, 0xe0, 0, // e0 f8 cf / cf f8 e0
-	// 	0x86, 0xc0, 0x6c, 0,
-	// 	0x30, 0x68, 0x50, 0,
-	// 	0x07, 0x18, 0x21, 0,
-	// })
-	result.env.Memory().Write(result.ctx, MemPalette, []byte{
-		0xf6, 0xd3, 0xff, 0,
-		0xa8, 0x75, 0xf9, 0,
-		0x6b, 0x6f, 0xeb, 0,
-		0x3f, 0x58, 0x7c, 0,
-	})
-
 	return result, nil
 }
 
 func (rt *Runtime) LoadCart(code []byte) error {
 	var err error
+
+	rt.env.Memory().Write(rt.ctx, MemPalette, []byte{
+		0xcf, 0xf8, 0xe0, 0,
+		0x6c, 0xc0, 0x86, 0,
+		0x50, 0x68, 0x30, 0,
+		0x21, 0x18, 0x07, 0,
+	})
 
 	rt.cart, err = rt.runtime.InstantiateModuleFromCode(rt.ctx, code)
 	if err != nil {
@@ -163,6 +158,7 @@ func (rt *Runtime) Close() {
 }
 
 func (rt *Runtime) Draw(screen *ebiten.Image) {
+	fmt.Print("\r")
 	rt.RenderFB(screen)
 	if rt.showFPS {
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.f", ebiten.CurrentFPS()), 0, 0)

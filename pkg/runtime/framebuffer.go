@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"image/color"
-	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -18,8 +17,6 @@ func (rt *Runtime) ClearFB() {
 }
 
 func (rt *Runtime) RenderFB(screen *ebiten.Image) {
-	//result := ebiten.NewImage(160, 160)
-
 	palette, _ := rt.env.Memory().Read(rt.ctx, MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
@@ -64,69 +61,105 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 			screen.Set(int(x)+offX, int(y), colors[index])
 		}
 	}
-
-	// return result
 }
 
 func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
+	drawColors, _ := rt.env.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+
 	var (
-		clipXMin   int32
-		clipYMin   int32
-		clipXMax   int32
-		clipYMax   int32
-		drawColors byte
+		colors             uint16 = uint16(drawColors[0]) | (uint16(drawColors[1]) << 8)
+		clipXMin, clipYMin int32
+		clipXMax, clipYMax int32
+		tx, ty             int32
+		sx, sy             int32
+		colorIdx           int32
+		bitIndex           int32
+		bite               uint8
+		shift              int32
+		dc                 uint8
 	)
 
-	drawColors, _ = rt.env.Memory().ReadByte(rt.ctx, MemDrawColors)
-
-	clipXMin = int32(math.Max(0, float64(dstX))) - dstX
-	clipYMin = int32(math.Max(0, float64(dstY))) - dstY
-	clipXMax = int32(math.Min(float64(w), float64(160-dstX)))
-	clipYMax = int32(math.Min(float64(h), float64(160-dstY)))
 	if rotate {
 		flipX = !flipX
-		clipXMin, clipYMin = clipYMin, clipXMin
-		clipXMax = int32(math.Min(float64(w), float64(160-dstY)))
-		clipYMax = int32(math.Min(float64(h), float64(160-dstX)))
+
+		clipXMin = 0
+		if dstY > 0 {
+			clipXMin = dstY
+		}
+		clipXMin -= dstY
+
+		clipYMin = 0
+		if dstX > 0 {
+			clipYMin = dstX
+		}
+		clipYMin -= dstX
+
+		clipXMax = w
+		if min := 160 - dstX; min < clipXMax {
+			clipXMax = min
+		}
+
+		clipYMax = h
+		if min := 160 - dstY; min < clipYMax {
+			clipYMax = min
+		}
+	} else {
+		clipXMin = 0
+		if dstX > 0 {
+			clipXMin = dstX
+		}
+		clipXMin -= dstX
+
+		clipYMin = 0
+		if dstY > 0 {
+			clipYMin = dstY
+		}
+		clipYMin -= dstY
+
+		clipXMax = w
+		if min := 160 - dstX; min < clipXMax {
+			clipXMax = min
+		}
+
+		clipYMax = h
+		if min := 160 - dstY; min < clipYMax {
+			clipYMax = min
+		}
 	}
 
 	for y := clipYMin; y < clipYMax; y++ {
 		for x := clipXMin; x < clipXMax; x++ {
-			tx := dstX + x
-			ty := dstY + y
+			tx = dstX + x
+			ty = dstY + y
 			if rotate {
 				tx = dstX + y
 				ty = dstY + x
 			}
 
-			sx := srcX + x
+			sx = srcX + x
 			if flipX {
 				sx = srcX + (w - x - 1)
 			}
-			sy := srcY + y
+
+			sy = srcY + y
 			if flipY {
 				sy = srcY + (h - y - 1)
 			}
 
-			var (
-				colorIdx byte
-				bitIndex = sy*stride + sx
-			)
+			bitIndex = sy*stride + sx
 			if bpp2 {
-				//log.Println("1-----", bitIndex/4)
-				b := sprite[uint32(bitIndex)>>2]
-				shift := byte(6 - ((bitIndex & 0x03) << 1))
-				colorIdx = (b >> shift) & 0b11
+				bite = sprite[bitIndex>>2]
+				shift = 6 - ((bitIndex & 0x03) << 1)
+				colorIdx = int32((bite >> shift) & 0x3)
 			} else {
-				//log.Println("2-----")
-				b := sprite[uint32(bitIndex)>>3]
-				shift := byte(7 - (bitIndex & 0x07))
-				colorIdx = (b >> shift) & 0b1
+				bite = sprite[bitIndex>>3]
+				shift = 7 - (bitIndex & 0x07)
+				colorIdx = int32((bite >> shift) & 0x1)
 			}
 
-			dc := (drawColors >> (colorIdx << 2)) & 0x0f
+			dc = uint8((colors >> (colorIdx << 2)) & 0x0f)
 			if dc != 0 {
-				rt.PointFB((dc-1)&0x03, tx, ty)
+				rt.PointFB(dc-1, tx, ty)
 			}
 		}
 	}
@@ -146,13 +179,11 @@ func (rt *Runtime) LineFB(x1, y1, x2, y2 int32) {
 	}
 
 	dx := int32(math.Abs(float64(x2 - x1)))
-	//sx := x1 < x2 ? 1 : -1;
 	var sx int32 = -1
 	if x1 < x2 {
 		sx = -1
 	}
 	dy := y2 - y1
-	//e1 = (dx > dy ? dx : -dy) / 2
 	e1 := -dy
 	if dx > dy {
 		e1 = dx
@@ -206,19 +237,15 @@ func (rt *Runtime) VLineFB(x, y, l int32) {
 	}
 }
 
-func (rt *Runtime) PointFB(colorIndex byte, x, y int32) {
+func (rt *Runtime) PointFB(color byte, x, y int32) {
 	var (
-		idx   uint32 = uint32((160*y + x) >> 2)
-		shift        = (x & 0x3) << 1
-		mask  byte   = 0x3 << shift
+		idx             int32 = (y*160 + x) >> 2
+		currentValue, _       = rt.env.Memory().ReadByte(rt.ctx, uint32(idx)+MemFramebuffer)
+		shift           int32 = (x & 0x3) << 1
+		mask            int32 = 0x3 << shift
+		value           uint8 = uint8((int32(color) << shift) | (int32(currentValue) & ^mask))
 	)
-	srcByte, _ := rt.env.Memory().ReadByte(rt.ctx, uint32(idx+MemFramebuffer))
-	mask = ^mask
-	rt.env.Memory().WriteByte(rt.ctx, idx+MemFramebuffer, (colorIndex<<shift)|(srcByte&mask))
-
-	if x < 0 || x > 159 || y < 0 || y > 159 {
-		log.Printf("Overflow: %d / %d", x, y)
-	}
+	rt.env.Memory().WriteByte(rt.ctx, uint32(idx)+MemFramebuffer, value)
 }
 
 func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
