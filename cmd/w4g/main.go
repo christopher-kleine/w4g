@@ -29,6 +29,18 @@ func main() {
 				Usage: "Sets the window scale compared to the game",
 				Value: 5,
 			},
+			&cli.StringFlag{
+				Name:    "encoder",
+				Aliases: []string{"enc"},
+				Usage:   "Encoder for video recordings (y4m, mjpeg)",
+				Value:   "y4m",
+			},
+			&cli.IntFlag{
+				Name:    "quality",
+				Aliases: []string{"q"},
+				Usage:   "Quality setting for the MJPEG encoder",
+				Value:   80,
+			},
 		},
 		EnableBashCompletion: true,
 		Authors: []*cli.Author{

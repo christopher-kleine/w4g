@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -60,7 +61,17 @@ func runNative(c *cli.Context) error {
 		return err
 	}
 
-	rt.Encoder = encoders.NewY4M()
+	enc := c.String("encoder")
+	switch enc {
+	case "y4m":
+		rt.Encoder = encoders.NewY4M()
+
+	case "mjpeg":
+		rt.Encoder = encoders.NewMJPEG(c.Int("quality"))
+
+	default:
+		return fmt.Errorf("unknown encoder %q selected", enc)
+	}
 
 	code, err := os.ReadFile(cart)
 	if err != nil {

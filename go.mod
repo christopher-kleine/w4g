@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/christopher-kleine/lorca v0.1.11-0.20220529163957-708fc256dcb5
+	github.com/christopher-kleine/mjpeg v0.0.0
 	github.com/hajimehoshi/ebiten/v2 v2.3.2
 	github.com/tetratelabs/wazero v0.0.0-20220523092326-5ed31d3c495d
 	github.com/urfave/cli/v2 v2.3.0
