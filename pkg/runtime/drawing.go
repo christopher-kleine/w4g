@@ -16,21 +16,37 @@ func (rt *Runtime) BlitSub(spr, x, y, w, h, srcX, srcY, stride, f int32) {
 }
 
 func (rt *Runtime) Line(x1, y1, x2, y2 int32) {
-	rt.LineFB(x1, y1, x2, y2)
+	dc0 := rt.GetColorByIndex(0)
+	if dc0 == 0 {
+		return
+	}
+	var strokeColor uint8 = (dc0 - 1) & 0x3
+	rt.LineFB(strokeColor, x1, y1, x2, y2)
 }
 
 func (rt *Runtime) HLine(x, y, l int32) {
-	rt.HLineFB(x, y, l)
+	dc0 := rt.GetColorByIndex(0)
+	if dc0 == 0 {
+		return
+	}
+	strokeColor := (dc0 - 1) & 0x3
+	rt.HLineFB(strokeColor, x, y, l)
 }
 
 func (rt *Runtime) VLine(x, y, l int32) {
-	rt.VLineFB(x, y, l)
+	dc0 := rt.GetColorByIndex(0)
+	if dc0 == 0 {
+		return
+	}
+	strokeColor := (dc0 - 1) & 0x3
+	rt.VLineFB(strokeColor, x, y, l)
 }
 
 func (rt *Runtime) Oval(x, y, w, h int32) {
 }
 
 func (rt *Runtime) Rect(x, y, w, h int32) {
+	rt.RectFB(x, y, w, h)
 }
 
 func (rt *Runtime) Text(txt, x, y int32) {

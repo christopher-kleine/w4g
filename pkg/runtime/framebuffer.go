@@ -2,10 +2,36 @@ package runtime
 
 import (
 	"image/color"
+	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"golang.org/x/exp/constraints"
 )
+
+func min[T constraints.Integer](a, b T) T {
+	if a <= b {
+		return a
+	}
+
+	return b
+}
+
+func max[T constraints.Integer](a, b T) T {
+	if a >= b {
+		return a
+	}
+
+	return b
+}
+
+func ternary[T constraints.Integer](eq bool, a, b T) T {
+	if eq {
+		return a
+	}
+
+	return b
+}
 
 // This file implements direct access to the framebuffer.
 // Other Drawing functions may use them.
@@ -81,74 +107,32 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 
 	if rotate {
 		flipX = !flipX
-
-		clipXMin = 0
-		if dstY > 0 {
-			clipXMin = dstY
-		}
-		clipXMin -= dstY
-
-		clipYMin = 0
-		if dstX > 0 {
-			clipYMin = dstX
-		}
-		clipYMin -= dstX
-
-		clipXMax = w
-		if min := 160 - dstX; min < clipXMax {
-			clipXMax = min
-		}
-
-		clipYMax = h
-		if min := 160 - dstY; min < clipYMax {
-			clipYMax = min
-		}
+		clipXMin = max(0, dstY) - dstY
+		clipYMin = max(0, dstX) - dstX
+		clipXMax = min(w, 160-dstY)
+		clipYMax = min(h, 160-dstX)
 	} else {
-		clipXMin = 0
-		if dstX > 0 {
-			clipXMin = dstX
-		}
-		clipXMin -= dstX
-
-		clipYMin = 0
-		if dstY > 0 {
-			clipYMin = dstY
-		}
-		clipYMin -= dstY
-
-		clipXMax = w
-		if min := 160 - dstX; min < clipXMax {
-			clipXMax = min
-		}
-
-		clipYMax = h
-		if min := 160 - dstY; min < clipYMax {
-			clipYMax = min
-		}
+		clipXMin = max(0, dstX) - dstX
+		clipYMin = max(0, dstY) - dstY
+		clipXMax = min(w, 160-dstX)
+		clipYMax = min(h, 160-dstY)
 	}
 
 	for y := clipYMin; y < clipYMax; y++ {
 		for x := clipXMin; x < clipXMax; x++ {
-			tx = dstX + x
-			ty = dstY + y
-			if rotate {
-				tx = dstX + y
-				ty = dstY + x
-			}
-
-			sx = srcX + x
-			if flipX {
-				sx = srcX + (w - x - 1)
-			}
-
-			sy = srcY + y
-			if flipY {
-				sy = srcY + (h - y - 1)
-			}
+			tx = dstX + ternary(rotate, y, x)
+			ty = dstY + ternary(rotate, x, y)
+			sx = srcX + ternary(flipX, w-x-1, x)
+			sy = srcY + ternary(flipY, h-y-1, y)
 
 			bitIndex = sy*stride + sx
 			if bpp2 {
-				bite = sprite[bitIndex>>2]
+				// FIXME: This can crash in some cases
+				of := bitIndex >> 2
+				if of >= int32(len(sprite)) {
+					of = int32(len(sprite) - 1)
+				}
+				bite = sprite[of]
 				shift = 6 - ((bitIndex & 0x03) << 1)
 				colorIdx = int32((bite >> shift) & 0x3)
 			} else {
@@ -159,20 +143,30 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 
 			dc = uint8((colors >> (colorIdx << 2)) & 0x0f)
 			if dc != 0 {
-				rt.PointFB(dc-1, tx, ty)
+				rt.PointUnclippedFB(dc-1, tx, ty)
 			}
 		}
 	}
 }
 
-func (rt *Runtime) LineFB(x1, y1, x2, y2 int32) {
+func (rt *Runtime) GetColorByIndex(index int) byte {
 	drawColors, _ := rt.env.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
-	var dc0 uint8 = drawColors[0] & 0xf
-	if dc0 == 0 {
-		return
-	}
-	var strokeColor uint8 = (dc0 - 1) & 0x3
+	switch index {
+	case 0:
+		return drawColors[0] & 0xf
 
+	case 1:
+		return drawColors[0] & 0xf0
+
+	case 2:
+		return drawColors[1] & 0xf
+
+	default:
+		return drawColors[2] & 0xf0
+	}
+}
+
+func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
 	if y1 > y2 {
 		x1, x2 = x2, x1
 		y1, y2 = y2, y1
@@ -191,7 +185,7 @@ func (rt *Runtime) LineFB(x1, y1, x2, y2 int32) {
 	err = err / 2
 
 	for {
-		rt.PointUnclippedFB(strokeColor, x1, y1)
+		rt.PointUnclippedFB(color, x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}
@@ -207,12 +201,76 @@ func (rt *Runtime) LineFB(x1, y1, x2, y2 int32) {
 	}
 }
 
-func (rt *Runtime) HLineFB(x, y, endX int32) {
-	rt.LineFB(x, y, x+endX, y)
+func (rt *Runtime) HLineFB(color byte, startX, y, l int32) {
+	endX := startX + l
+
+	// Make sure it's from left to right
+	if startX > endX {
+		startX, endX = endX, startX
+	}
+
+	// Is the line even visible?
+	if y >= 160 || y < 0 {
+		log.Printf("Y out of bounds %d", y)
+		return
+	}
+	if endX < 0 || startX >= 160 {
+		log.Printf("X out of bounds %d / %d", startX, endX)
+		return
+	}
+
+	// Stay in bound
+	if endX > 159 {
+		endX = 159
+	}
+	if endX < 0 {
+		endX = 0
+	}
+	if startX > 159 {
+		startX = 159
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	for x := startX; x < endX; x++ {
+		rt.PointFB(color, x, y)
+	}
 }
 
-func (rt *Runtime) VLineFB(x, y, endY int32) {
-	rt.LineFB(x, y, x, y+endY)
+func (rt *Runtime) VLineFB(color byte, x, startY, l int32) {
+	endY := startY + l
+
+	// Make sure it's from top to bottom
+	if startY > endY {
+		startY, endY = endY, startY
+	}
+
+	// Is the line even visible?
+	if x >= 160 || x < 0 {
+		return
+	}
+	if endY < 0 || startY >= 160 {
+		return
+	}
+
+	// Stay in bound
+	if endY > 159 {
+		endY = 159
+	}
+	if endY < 0 {
+		endY = 0
+	}
+	if startY > 159 {
+		startY = 159
+	}
+	if startY < 0 {
+		startY = 0
+	}
+
+	for y := startY; y < endY; y++ {
+		rt.PointFB(color, x, y)
+	}
 }
 
 func (rt *Runtime) PointFB(color byte, x, y int32) {
@@ -249,4 +307,18 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 			currX += 8
 		}
 	}
+}
+
+func (rt *Runtime) RectFB(x, y, w, h int32) {
+	// border := rt.GetColorByIndex(1)
+	fill := rt.GetColorByIndex(0)
+
+	for line := y; line < y+h; line++ {
+		rt.LineFB(fill, x, line, x+w, line)
+	}
+
+	// rt.HLineFB(border, x, y, w)
+	// rt.HLineFB(border, x, y+h, w)
+	// rt.VLineFB(border, x, y, h)
+	// rt.VLineFB(border, x+w-1, y, h)
 }
