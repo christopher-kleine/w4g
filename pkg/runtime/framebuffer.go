@@ -127,12 +127,7 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 
 			bitIndex = sy*stride + sx
 			if bpp2 {
-				// FIXME: This can crash in some cases
-				of := bitIndex >> 2
-				if of >= int32(len(sprite)) {
-					of = int32(len(sprite) - 1)
-				}
-				bite = sprite[of]
+				bite = sprite[bitIndex>>2]
 				shift = 6 - ((bitIndex & 0x03) << 1)
 				colorIdx = int32((bite >> shift) & 0x3)
 			} else {

@@ -5,7 +5,7 @@ func (rt *Runtime) Blit(spr, x, y, w, h, f int32) {
 }
 
 func (rt *Runtime) BlitSub(spr, x, y, w, h, srcX, srcY, stride, f int32) {
-	sprite, _ := rt.env.Memory().Read(rt.ctx, uint32(spr), uint32(w*h))
+	sprite, _ := rt.env.Memory().Read(rt.ctx, uint32(spr), uint32(stride*(srcY+h)))
 
 	bpp2 := f&1 == 1
 	flipX := f&2 == 2
