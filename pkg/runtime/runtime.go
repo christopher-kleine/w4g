@@ -122,7 +122,7 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 		ExportFunction("traceUtf8", result.TraceUtf8).
 		// Memory
 		ExportMemoryWithMax("memory", 1, 1).
-		Instantiate(result.ctx)
+		Instantiate(result.ctx, result.runtime)
 
 	if err != nil {
 		return result, err
@@ -143,7 +143,7 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 		0x21, 0x18, 0x07, 0xff,
 	})
 
-	rt.cart, err = rt.runtime.InstantiateModuleFromCode(rt.ctx, code)
+	rt.cart, err = rt.runtime.InstantiateModuleFromBinary(rt.ctx, code)
 	if err != nil {
 		return err
 	}
@@ -157,12 +157,8 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 }
 
 func (rt *Runtime) Close() {
-	if rt.env != nil {
-		rt.env.Close(rt.ctx)
-	}
-
-	if rt.cart != nil {
-		rt.cart.Close(rt.ctx)
+	if rt.runtime != nil {
+		rt.runtime.Close(rt.ctx)
 	}
 }
 
