@@ -1,11 +1,16 @@
 package runtime
 
-func (rt *Runtime) Blit(spr, x, y, w, h, f int32) {
-	rt.BlitSub(spr, x, y, w, h, 0, 0, w, f)
+import (
+	"context"
+	"github.com/tetratelabs/wazero/api"
+)
+
+func (rt *Runtime) Blit(ctx context.Context, mod api.Module, spr, x, y, w, h, f int32) {
+	rt.BlitSub(ctx, mod, spr, x, y, w, h, 0, 0, w, f)
 }
 
-func (rt *Runtime) BlitSub(spr, x, y, w, h, srcX, srcY, stride, f int32) {
-	sprite, _ := rt.env.Memory().Read(rt.ctx, uint32(spr), uint32(stride*(srcY+h)))
+func (rt *Runtime) BlitSub(ctx context.Context, mod api.Module, spr, x, y, w, h, srcX, srcY, stride, f int32) {
+	sprite, _ := mod.Memory().Read(ctx, uint32(spr), uint32(stride*(srcY+h)))
 
 	bpp2 := f&1 == 1
 	flipX := f&2 == 2
@@ -49,25 +54,25 @@ func (rt *Runtime) Rect(x, y, w, h int32) {
 	rt.RectFB(x, y, w, h)
 }
 
-func (rt *Runtime) Text(txt, x, y int32) {
-	rt.TextFB(rt.getString(txt), x, y)
+func (rt *Runtime) Text(ctx context.Context, mod api.Module, txt, x, y int32) {
+	rt.TextFB(rt.getString(ctx, mod, txt), x, y)
 }
 
-func (rt *Runtime) TextUTF8(textPtr, byteLength, x, y int32) {
+func (rt *Runtime) TextUTF8(ctx context.Context, mod api.Module, textPtr, byteLength, x, y int32) {
 	// const text = new Uint8Array(this.memory.buffer, textPtr, byteLength);
 	// this.framebuffer.drawText(text, x, y);
-	text, _ := rt.env.Memory().Read(rt.ctx, uint32(textPtr), uint32(byteLength))
+	text, _ := mod.Memory().Read(ctx, uint32(textPtr), uint32(byteLength))
 	rt.TextFB(string(text), x, y)
 }
 
-func (rt *Runtime) getString(txt int32) string {
-	letter, _ := rt.env.Memory().ReadByte(rt.ctx, uint32(txt))
+func (rt *Runtime) getString(ctx context.Context, mod api.Module, txt int32) string {
+	letter, _ := mod.Memory().ReadByte(ctx, uint32(txt))
 	text := ""
 	offset := 0
 	for letter != 0 {
 		text += string(letter)
 		offset++
-		letter, _ = rt.env.Memory().ReadByte(rt.ctx, uint32(txt)+uint32(offset))
+		letter, _ = mod.Memory().ReadByte(ctx, uint32(txt)+uint32(offset))
 	}
 
 	return text
