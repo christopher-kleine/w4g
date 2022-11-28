@@ -100,12 +100,12 @@ func compressBuffer(buffer []byte, bpp2 bool) []byte {
 
 func (rt *Runtime) ClearFB() {
 	for pos := MemFramebuffer; pos < MemFramebuffer+SizeFramebuffer; pos++ {
-		rt.env.Memory().WriteByte(rt.ctx, pos, 0)
+		rt.cart.Memory().WriteByte(rt.ctx, pos, 0)
 	}
 }
 
 func (rt *Runtime) RenderFB(screen *ebiten.Image) {
-	palette, _ := rt.env.Memory().Read(rt.ctx, MemPalette, SizePalette)
+	palette, _ := rt.cart.Memory().Read(rt.ctx, MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
 			A: 0xff,
@@ -133,7 +133,7 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 		},
 	}
 
-	framebuffer, _ := rt.env.Memory().Read(rt.ctx, MemFramebuffer, SizeFramebuffer)
+	framebuffer, _ := rt.cart.Memory().Read(rt.ctx, MemFramebuffer, SizeFramebuffer)
 	for offY, pixel := range framebuffer {
 		colorIndex := []byte{
 			pixel & 3,
@@ -152,7 +152,7 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 }
 
 func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
-	drawColors, _ := rt.env.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+	drawColors, _ := rt.cart.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
 
 	var (
 		colors             uint16 = uint16(drawColors[0]) | (uint16(drawColors[1]) << 8)
@@ -207,7 +207,7 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 }
 
 func (rt *Runtime) GetColorByIndex(index int) byte {
-	drawColors, _ := rt.env.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+	drawColors, _ := rt.cart.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
 	switch index {
 	case 0:
 		return drawColors[0] & 0xf
@@ -333,12 +333,12 @@ func (rt *Runtime) VLineFB(color byte, x, startY, l int32) {
 func (rt *Runtime) PointFB(color byte, x, y int32) {
 	var (
 		idx             int32 = (y*160 + x) >> 2
-		currentValue, _       = rt.env.Memory().ReadByte(rt.ctx, uint32(idx)+MemFramebuffer)
+		currentValue, _       = rt.cart.Memory().ReadByte(rt.ctx, uint32(idx)+MemFramebuffer)
 		shift           int32 = (x & 0x3) << 1
 		mask            int32 = 0x3 << shift
 		value           uint8 = uint8((int32(color) << shift) | (int32(currentValue) & ^mask))
 	)
-	rt.env.Memory().WriteByte(rt.ctx, uint32(idx)+MemFramebuffer, value)
+	rt.cart.Memory().WriteByte(rt.ctx, uint32(idx)+MemFramebuffer, value)
 }
 
 func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
