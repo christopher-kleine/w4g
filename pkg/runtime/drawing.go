@@ -10,7 +10,7 @@ func (rt *Runtime) Blit(ctx context.Context, mod api.Module, spr, x, y, w, h, f 
 }
 
 func (rt *Runtime) BlitSub(ctx context.Context, mod api.Module, spr, x, y, w, h, srcX, srcY, stride, f int32) {
-	sprite, _ := mod.Memory().Read(ctx, uint32(spr), uint32(stride*(srcY+h)))
+	sprite, _ := mod.Memory().Read(uint32(spr), uint32(stride*(srcY+h)))
 
 	bpp2 := f&1 == 1
 	flipX := f&2 == 2
@@ -61,18 +61,18 @@ func (rt *Runtime) Text(ctx context.Context, mod api.Module, txt, x, y int32) {
 func (rt *Runtime) TextUTF8(ctx context.Context, mod api.Module, textPtr, byteLength, x, y int32) {
 	// const text = new Uint8Array(this.memory.buffer, textPtr, byteLength);
 	// this.framebuffer.drawText(text, x, y);
-	text, _ := mod.Memory().Read(ctx, uint32(textPtr), uint32(byteLength))
+	text, _ := mod.Memory().Read(uint32(textPtr), uint32(byteLength))
 	rt.TextFB(string(text), x, y)
 }
 
 func (rt *Runtime) getString(ctx context.Context, mod api.Module, txt int32) string {
-	letter, _ := mod.Memory().ReadByte(ctx, uint32(txt))
+	letter, _ := mod.Memory().ReadByte(uint32(txt))
 	text := ""
 	offset := 0
 	for letter != 0 {
 		text += string(letter)
 		offset++
-		letter, _ = mod.Memory().ReadByte(ctx, uint32(txt)+uint32(offset))
+		letter, _ = mod.Memory().ReadByte(uint32(txt) + uint32(offset))
 	}
 
 	return text

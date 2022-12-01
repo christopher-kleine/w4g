@@ -139,7 +139,7 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 		return err
 	}
 
-	rt.cart.Memory().Write(rt.ctx, MemPalette, []byte{
+	rt.cart.Memory().Write(MemPalette, []byte{
 		0xcf, 0xf8, 0xe0, 0xff,
 		0x6c, 0xc0, 0x86, 0xff,
 		0x50, 0x68, 0x30, 0xff,
@@ -215,7 +215,7 @@ func (rt *Runtime) KeyState(keys map[ebiten.Key]byte) byte {
 }
 
 func (rt *Runtime) Update() error {
-	SystemFlags, _ := rt.cart.Memory().ReadByte(rt.ctx, MemSystemFlags)
+	SystemFlags, _ := rt.cart.Memory().ReadByte(MemSystemFlags)
 	if SystemFlags&FlagPreserveScreen == 0 {
 		rt.ClearFB()
 	}
@@ -228,10 +228,10 @@ func (rt *Runtime) Update() error {
 		}
 	}
 
-	rt.cart.Memory().WriteByte(rt.ctx, MemGamepads+0*SizeGamepads, rt.KeyState(Player1Keys))
-	rt.cart.Memory().WriteByte(rt.ctx, MemGamepads+1*SizeGamepads, rt.KeyState(Player2Keys))
-	// rt.cart.Memory().WriteByte(rt.ctx, MemGamepads+2*SizeGamepads, rt.KeyState(Player3Keys))
-	// rt.cart.Memory().WriteByte(rt.ctx, MemGamepads+3*SizeGamepads, rt.KeyState(Player4Keys))
+	rt.cart.Memory().WriteByte(MemGamepads+0*SizeGamepads, rt.KeyState(Player1Keys))
+	rt.cart.Memory().WriteByte(MemGamepads+1*SizeGamepads, rt.KeyState(Player2Keys))
+	// rt.cart.Memory().WriteByte(MemGamepads+2*SizeGamepads, rt.KeyState(Player3Keys))
+	// rt.cart.Memory().WriteByte(MemGamepads+3*SizeGamepads, rt.KeyState(Player4Keys))
 
 	_, err := rt.cart.ExportedFunction("update").Call(rt.ctx)
 	if err != nil {
