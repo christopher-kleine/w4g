@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"image/png"
 	"log"
@@ -79,6 +80,11 @@ var (
 	}
 )
 
+// envWasm was compiled using `cd wasm; wat2wasm --debug-names env.wat`
+//
+//go:embed wasm/env.wasm
+var envWasm []byte
+
 type Runtime struct {
 	runtime  wazero.Runtime
 	cart     api.Module
@@ -87,6 +93,10 @@ type Runtime struct {
 	showFPS  bool
 	Encoder  encoders.Encoder
 }
+
+var (
+	i32 = api.ValueTypeI32
+)
 
 func NewRuntime(showFPS bool) (*Runtime, error) {
 	var err error
@@ -99,27 +109,88 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 
 	result.runtime = wazero.NewRuntime(result.ctx)
 
-	builder := result.runtime.NewHostModuleBuilder("env")
+	builder := result.runtime.NewHostModuleBuilder("goenv")
 	_, err = builder.
 		// Drawing
-		NewFunctionBuilder().WithFunc(result.Blit).Export("blit").
-		NewFunctionBuilder().WithFunc(result.BlitSub).Export("blitSub").
-		NewFunctionBuilder().WithFunc(result.Line).Export("line").
-		NewFunctionBuilder().WithFunc(result.HLine).Export("hline").
-		NewFunctionBuilder().WithFunc(result.VLine).Export("vline").
-		NewFunctionBuilder().WithFunc(result.Oval).Export("oval").
-		NewFunctionBuilder().WithFunc(result.Rect).Export("rect").
-		NewFunctionBuilder().WithFunc(result.Text).Export("text").
-		NewFunctionBuilder().WithFunc(result.TextUTF8).Export("textUtf8").
-		// Sound
-		NewFunctionBuilder().WithFunc(result.Tone).Export("tone").
-		// Storage
-		NewFunctionBuilder().WithFunc(result.DiskW).Export("diskw").
-		NewFunctionBuilder().WithFunc(result.DiskR).Export("diskr").
-		// Other
-		NewFunctionBuilder().WithFunc(result.Trace).Export("trace").
-		NewFunctionBuilder().WithFunc(result.TraceUtf8).Export("traceUtf8").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.blit), []api.ValueType{i32, i32, i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("sprite", "x", "y", "width", "height", "flags").
+		Export("blit").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.blitSub), []api.ValueType{i32, i32, i32, i32, i32, i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("sprite", "x", "y", "width", "height", "srcX", "srcY", "stride", "flags").
+		Export("blitSub").
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.line), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("x1", "y1", "x2", "y2").
+		Export("line").
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.hline), []api.ValueType{i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("x", "y", "len").
+		Export("hline").
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.vline), []api.ValueType{i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("x", "y", "len").
+		Export("vline").
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.oval), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("x", "y", "width", "height").
+		Export("oval").
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.rect), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("x", "y", "width", "height").
+		Export("rect").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.text), []api.ValueType{i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "x", "y").
+		Export("text").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.textUtf8), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "byteLength", "x", "y").
+		Export("textUtf8").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.textUtf16), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "byteLength", "x", "y").
+		Export("textUtf16").
+		//// Sound
+		NewFunctionBuilder().
+		WithGoFunction(api.GoFunc(result.tone), []api.ValueType{i32, i32, i32, i32}, []api.ValueType{}).
+		WithParameterNames("frequency", "duration", "volume", "flags").
+		Export("tone").
+		//// Storage
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.diskr), []api.ValueType{i32, i32}, []api.ValueType{i32}).
+		WithParameterNames("dest", "size").
+		Export("diskr").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.diskw), []api.ValueType{i32, i32}, []api.ValueType{i32}).
+		WithParameterNames("src", "size").
+		Export("diskw").
+		//// Other
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.trace), []api.ValueType{i32}, []api.ValueType{}).
+		WithParameterNames("str").
+		Export("trace").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.traceUtf8), []api.ValueType{i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "byteLength").
+		Export("traceUtf8").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.traceUtf16), []api.ValueType{i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "byteLength").
+		Export("traceUtf16").
+		NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(result.tracef), []api.ValueType{i32, i32}, []api.ValueType{}).
+		WithParameterNames("str", "byteLength").
+		Export("tracef").
 		Instantiate(result.ctx, result.runtime)
+
+	if err != nil {
+		result.runtime.Close(result.ctx)
+		return nil, err
+	}
+
+	_, err = result.runtime.InstantiateModuleFromBinary(result.ctx, envWasm)
 
 	if err != nil {
 		result.runtime.Close(result.ctx)
