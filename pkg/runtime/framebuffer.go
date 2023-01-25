@@ -2,11 +2,15 @@ package runtime
 
 import (
 	"image/color"
-	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"golang.org/x/exp/constraints"
+)
+
+const (
+	WIDTH  = 160
+	HEIGHT = 160
 )
 
 func min[T constraints.Integer](a, b T) T {
@@ -25,7 +29,7 @@ func max[T constraints.Integer](a, b T) T {
 	return b
 }
 
-func ternary[T constraints.Integer](eq bool, a, b T) T {
+func ternary[T any](eq bool, a, b T) T {
 	if eq {
 		return a
 	}
@@ -142,8 +146,8 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 			(pixel >> 6) & 3,
 		}
 
-		x := (offY * 4) % 160
-		y := (offY * 4) / 160
+		x := (offY * 4) % WIDTH
+		y := (offY * 4) / WIDTH
 
 		for offX, index := range colorIndex {
 			screen.Set(int(x)+offX, int(y), colors[index])
@@ -171,13 +175,13 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 		flipX = !flipX
 		clipXMin = max(0, dstY) - dstY
 		clipYMin = max(0, dstX) - dstX
-		clipXMax = min(w, 160-dstY)
-		clipYMax = min(h, 160-dstX)
+		clipXMax = min(w, WIDTH-dstY)
+		clipYMax = min(h, WIDTH-dstX)
 	} else {
 		clipXMin = max(0, dstX) - dstX
 		clipYMin = max(0, dstY) - dstY
-		clipXMax = min(w, 160-dstX)
-		clipYMax = min(h, 160-dstY)
+		clipXMax = min(w, WIDTH-dstX)
+		clipYMax = min(h, WIDTH-dstY)
 	}
 
 	for y := clipYMin; y < clipYMax; y++ {
@@ -213,40 +217,42 @@ func (rt *Runtime) GetColorByIndex(index int) byte {
 		return drawColors[0] & 0xf
 
 	case 1:
-		return drawColors[0] & 0xf0
+		return (drawColors[0] >> 4) & 0xf
 
 	case 2:
 		return drawColors[1] & 0xf
 
 	default:
-		return drawColors[2] & 0xf0
+		return (drawColors[2] >> 4) & 0xf0
 	}
 }
 
 func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
+	if color == 0 {
+		return
+	}
+
 	if y1 > y2 {
 		x1, x2 = x2, x1
 		y1, y2 = y2, y1
 	}
 
 	var dx int32 = int32(math.Abs(float64(x2 - x1)))
-	var sx int32 = -1
-	if x1 < x2 {
-		sx = 1
-	}
+	var sx int32 = ternary[int32](x1 < x2, 1, -1)
 	var dy int32 = y2 - y1
 	var err int32 = -dy
 	if dx > dy {
 		err = dx
 	}
 	err = err / 2
+	var e2 int32
 
 	for {
 		rt.PointUnclippedFB(color, x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}
-		e2 := err
+		e2 = err
 		if e2 > -dx {
 			err -= dy
 			x1 += sx
@@ -267,12 +273,10 @@ func (rt *Runtime) HLineFB(color byte, startX, y, len int32) {
 	}
 
 	// Is the line even visible?
-	if y >= 160 || y < 0 {
-		log.Printf("Y out of bounds %d", y)
+	if y >= HEIGHT || y < 0 {
 		return
 	}
-	if endX < 0 || startX >= 160 {
-		log.Printf("X out of bounds %d / %d", startX, endX)
+	if endX < 0 || startX >= WIDTH {
 		return
 	}
 
@@ -295,44 +299,39 @@ func (rt *Runtime) HLineFB(color byte, startX, y, len int32) {
 	}
 }
 
-func (rt *Runtime) VLineFB(color byte, x, startY, len int32) {
-	endY := startY + len
+func (rt *Runtime) HLineUnclippedFB(color byte, startX, y, endX int32) {
+	if y >= 0 && y < HEIGHT {
+		if startX < 0 {
+			startX = 0
+		}
 
-	// Make sure it's from top to bottom
-	if startY > endY {
-		startY, endY = endY, startY
+		if endX > WIDTH {
+			endX = WIDTH
+		}
+
+		if startX < endX {
+			for x := startX; x < endX; x++ {
+				rt.PointUnclippedFB(color, x, y)
+			}
+		}
 	}
+}
 
-	// Is the line even visible?
-	if x >= 160 || x < 0 {
+func (rt *Runtime) VLineFB(color byte, x, y, len int32) {
+	if y+len <= 0 || x < 0 || x >= WIDTH || color == 0 {
 		return
 	}
-	if endY < 0 || startY >= 160 {
-		return
-	}
 
-	// Stay in bound
-	if endY > 159 {
-		endY = 159
-	}
-	if endY < 0 {
-		endY = 0
-	}
-	if startY > 159 {
-		startY = 159
-	}
-	if startY < 0 {
-		startY = 0
-	}
-
-	for y := startY; y < endY; y++ {
-		rt.PointFB(color, x, y)
+	startY := max(0, y)
+	endY := min(HEIGHT, y+len)
+	for yy := startY; yy < endY; yy++ {
+		rt.PointFB(color, x, yy)
 	}
 }
 
 func (rt *Runtime) PointFB(color byte, x, y int32) {
 	var (
-		idx             int32 = (y*160 + x) >> 2
+		idx             int32 = (y*HEIGHT + x) >> 2
 		currentValue, _       = rt.cart.Memory().ReadByte(uint32(idx) + MemFramebuffer)
 		shift           int32 = (x & 0x3) << 1
 		mask            int32 = 0x3 << shift
@@ -342,7 +341,7 @@ func (rt *Runtime) PointFB(color byte, x, y int32) {
 }
 
 func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
-	if x >= 0 && x < 160 && y >= 0 && y < 160 {
+	if x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT {
 		rt.PointFB(colorIndex, x, y)
 	}
 }
@@ -366,20 +365,135 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 	}
 }
 
-func (rt *Runtime) OvalFB(x, y, width, height int32) {}
+func (rt *Runtime) OvalFB(x, y, width, height int32) {
+	dc0 := rt.GetColorByIndex(0)
+	dc1 := rt.GetColorByIndex(1)
 
-func (rt *Runtime) RectFB(x, y, width, height int32) {
-	// border := rt.GetColorByIndex(1)
-	fill := rt.GetColorByIndex(0)
-
-	for line := y; line < y+height; line++ {
-		rt.LineFB(fill, x, line, x+width, line)
+	if dc1 == 0xf {
+		return
 	}
 
-	// rt.HLineFB(border, x, y, width)
-	// rt.HLineFB(border, x, y+height, width)
-	// rt.VLineFB(border, x, y, height)
-	// rt.VLineFB(border, x+width-1, y, height)
+	strokeColor := (dc1 - 1) & 0x3
+	fillColor := (dc0 - 1) & 0x3
+
+	a := width - 1
+	b := height - 1
+	b1 := b % 2
+
+	// north := y + int32(math.Floor(float64(height)/2))
+	north := y + height/2
+	west := x
+	east := x + width - 1
+	south := north - b1
+
+	dx := 4 * (1 - a) * b * b
+	dy := 4 * (b1 + 1) * a * a
+
+	err := dx + dy + b1*a*a
+
+	a *= 8 * a
+	b1 = 8 * b * b
+
+	// fmt.Print("OvalFB: ", x, ", ", y, ", ", width, ", ", height, ", ", strokeColor, ", ", fillColor, ", ", north, ", ", west, ", ", east, ", ", south, ", ", dx, ", ", dy, ", ", err, ", ", a, ", ", b1, "\n")
+
+	var err2 int32
+
+	for {
+		rt.PointUnclippedFB(strokeColor, east, north)
+		rt.PointUnclippedFB(strokeColor, west, north)
+		rt.PointUnclippedFB(strokeColor, west, south)
+		rt.PointUnclippedFB(strokeColor, east, south)
+
+		start := west + 1
+		len := east - start
+
+		if dc0 != 0 && len > 0 {
+			rt.HLineUnclippedFB(fillColor, start, north, east)
+			rt.HLineUnclippedFB(fillColor, start, south, east)
+		}
+		err2 = 2 * err
+		if err2 <= dy {
+			// Move vertical scan
+			north += 1
+			south -= 1
+			dy += a
+			err += dy
+		}
+		if err2 >= dx || 2*err > dy {
+			// Move horizontal scan
+			west += 1
+			east -= 1
+			dx += b1
+			err += dx
+		}
+
+		if west > east {
+			break
+		}
+	}
+
+	// Make sure north and south have moved the entire way so top/bottom aren't missing
+	for north-south < height {
+		rt.PointUnclippedFB(strokeColor, west-1, north) /*   II. Quadrant    */
+		rt.PointUnclippedFB(strokeColor, east+1, north) /*   I. Quadrant     */
+		north += 1
+		rt.PointUnclippedFB(strokeColor, west-1, south) /*   III. Quadrant   */
+		rt.PointUnclippedFB(strokeColor, east+1, south) /*   IV. Quadrant    */
+		south -= 1
+	}
+}
+
+func (rt *Runtime) RectFB(x, y, width, height int32) {
+	startX := max(0, x)
+	startY := max(0, y)
+	endXUnclamp := x + width
+	endYUnclamp := y + height
+	endX := min(WIDTH, endXUnclamp)
+	endY := min(HEIGHT, endYUnclamp)
+
+	dc0 := rt.GetColorByIndex(0)
+	dc1 := rt.GetColorByIndex(1)
+
+	if dc0 != 0 {
+		dc0 = (dc0 - 1) & 0x3
+		for yy := startY; yy < endY; yy++ {
+			for xx := startX; xx < endX; xx++ {
+				rt.PointFB(dc0, xx, yy)
+			}
+		}
+	}
+
+	if dc1 != 0 {
+		dc1 = (dc1 - 1) & 0x3
+
+		// Left edge
+		if x >= 0 && x < WIDTH {
+			for yy := startY; yy < endY; yy++ {
+				rt.PointFB(dc1, x, yy)
+			}
+		}
+
+		// Right edge
+		if endXUnclamp > 0 && endXUnclamp <= WIDTH {
+			for yy := startY; yy < endY; yy++ {
+				rt.PointFB(dc1, endXUnclamp-1, yy)
+			}
+		}
+
+		// Top edge
+		if y >= 0 && y < HEIGHT {
+			for xx := startX; xx < endX; xx++ {
+				rt.PointFB(dc1, xx, y)
+			}
+		}
+
+		// Bottom edge
+		if endYUnclamp > 0 && endYUnclamp <= HEIGHT {
+			for xx := startX; xx < endX; xx++ {
+				rt.PointFB(dc1, xx, endYUnclamp-1)
+			}
+		}
+	}
 }
 
 func (rt *Runtime) Tone(frequency, duration, volume, flags int32) {

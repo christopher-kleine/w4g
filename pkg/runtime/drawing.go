@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+
 	"github.com/tetratelabs/wazero/api"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/unicode"

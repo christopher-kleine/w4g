@@ -84,6 +84,9 @@ func runNative(c *cli.Context) error {
 	}
 
 	ebiten.SetWindowSize(160*scale, 160*scale)
+	ebiten.SetWindowTitle("WASM-4 (Go)")
+	ebiten.SetMaxTPS(60)
+	ebiten.SetFPSMode(ebiten.FPSModeVsyncOn)
 	err = ebiten.RunGame(rt)
 
 	return err
