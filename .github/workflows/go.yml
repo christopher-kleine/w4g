@@ -9,17 +9,27 @@ on:
 jobs:
 
   build:
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.18
+      - name: Configure dependencies
+        if: runner.os == 'Linux'
+        run: |  # Per https://github.com/go-gl/glfw#installation
+          sudo apt-get update && sudo apt-get install libgl1-mesa-dev xorg-dev
 
-    - name: Build
-      run: go build -v ./...
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+          cache: true
 
-    - name: Test
-      run: go test -v ./...
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
