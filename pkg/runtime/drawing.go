@@ -2,25 +2,61 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"github.com/tetratelabs/wazero/api"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/unicode"
 )
 
-func (rt *Runtime) Blit(ctx context.Context, mod api.Module, spr, x, y, w, h, f int32) {
-	rt.BlitSub(ctx, mod, spr, x, y, w, h, 0, 0, w, f)
+// blit copies pixels to the framebuffer.
+func (rt *Runtime) blit(_ context.Context, mod api.Module, params []uint64) {
+	sprite := int32(params[0])
+	x := int32(params[1])
+	y := int32(params[2])
+	width := int32(params[3])
+	height := int32(params[4])
+	flags := int32(params[5])
+
+	var srcX, srcY int32
+	stride := width
+
+	spriteBuf, _ := mod.Memory().Read(uint32(sprite), uint32(stride*(srcY+height)))
+	rt.blitFB(spriteBuf, x, y, width, height, srcX, srcY, stride, flags)
 }
 
-func (rt *Runtime) BlitSub(ctx context.Context, mod api.Module, spr, x, y, w, h, srcX, srcY, stride, f int32) {
-	sprite, _ := mod.Memory().Read(ctx, uint32(spr), uint32(stride*(srcY+h)))
+// blitSub copies a subregion within a larger sprite atlas to the
+// framebuffer.
+func (rt *Runtime) blitSub(_ context.Context, mod api.Module, params []uint64) {
+	sprite := int32(params[0])
+	x := int32(params[1])
+	y := int32(params[2])
+	width := int32(params[3])
+	height := int32(params[4])
+	srcX := int32(params[5])
+	srcY := int32(params[6])
+	stride := int32(params[7])
+	flags := int32(params[8])
 
-	bpp2 := f&1 == 1
-	flipX := f&2 == 2
-	flipY := f&4 == 4
-	rotate := f&8 == 8
-
-	rt.BlitFB(sprite, x, y, w, h, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
+	spriteBuf, _ := mod.Memory().Read(uint32(sprite), uint32(stride*(srcY+height)))
+	rt.blitFB(spriteBuf, x, y, width, height, srcX, srcY, stride, flags)
 }
 
-func (rt *Runtime) Line(x1, y1, x2, y2 int32) {
+func (rt *Runtime) blitFB(sprite []byte, x, y, width, height, srcX, srcY, stride, flags int32) {
+	bpp2 := flags&1 == 1
+	flipX := flags&2 == 2
+	flipY := flags&4 == 4
+	rotate := flags&8 == 8
+
+	rt.BlitFB(sprite, x, y, width, height, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
+}
+
+// line draws a line between two points.
+func (rt *Runtime) line(_ context.Context, params []uint64) {
+	x1 := int32(params[0])
+	y1 := int32(params[1])
+	x2 := int32(params[2])
+	y2 := int32(params[3])
+
 	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
@@ -29,51 +65,116 @@ func (rt *Runtime) Line(x1, y1, x2, y2 int32) {
 	rt.LineFB(strokeColor, x1, y1, x2, y2)
 }
 
-func (rt *Runtime) HLine(x, y, l int32) {
+// hline draws a horizontal line.
+func (rt *Runtime) hline(_ context.Context, params []uint64) {
+	x := int32(params[0])
+	y := int32(params[1])
+	len := int32(params[2])
+
 	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.HLineFB(strokeColor, x, y, l)
+	rt.HLineFB(strokeColor, x, y, len)
 }
 
-func (rt *Runtime) VLine(x, y, l int32) {
+// vline draws a vertical line.
+func (rt *Runtime) vline(_ context.Context, params []uint64) {
+	x := int32(params[0])
+	y := int32(params[1])
+	len := int32(params[2])
+
 	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.VLineFB(strokeColor, x, y, l)
+	rt.VLineFB(strokeColor, x, y, len)
 }
 
-func (rt *Runtime) Oval(x, y, w, h int32) {
+// oval draws an oval (or circle).
+func (rt *Runtime) oval(_ context.Context, params []uint64) {
+	x := int32(params[0])
+	y := int32(params[1])
+	width := int32(params[2])
+	height := int32(params[3])
+
+	rt.OvalFB(x, y, width, height)
 }
 
-func (rt *Runtime) Rect(x, y, w, h int32) {
-	rt.RectFB(x, y, w, h)
+// rect draws a rectangle.
+func (rt *Runtime) rect(_ context.Context, params []uint64) {
+	x := int32(params[0])
+	y := int32(params[1])
+	width := int32(params[2])
+	height := int32(params[3])
+
+	rt.RectFB(x, y, width, height)
 }
 
-func (rt *Runtime) Text(ctx context.Context, mod api.Module, txt, x, y int32) {
-	rt.TextFB(rt.getString(ctx, mod, txt), x, y)
+// text draws text using the built-in system font from a *zero-terminated*
+// string pointer.
+func (rt *Runtime) text(_ context.Context, mod api.Module, params []uint64) {
+	str := int32(params[0])
+	x := int32(params[1])
+	y := int32(params[2])
+
+	rt.TextFB(getString(mod.Memory(), str), x, y)
 }
 
-func (rt *Runtime) TextUTF8(ctx context.Context, mod api.Module, textPtr, byteLength, x, y int32) {
-	// const text = new Uint8Array(this.memory.buffer, textPtr, byteLength);
-	// this.framebuffer.drawText(text, x, y);
-	text, _ := mod.Memory().Read(ctx, uint32(textPtr), uint32(byteLength))
-	rt.TextFB(string(text), x, y)
+// textUtf8 draws text using the built-in system font from a UTF-8 encoded
+// input.
+func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) {
+	str := int32(params[0])
+	byteLength := int32(params[1])
+	x := int32(params[2])
+	y := int32(params[3])
+
+	s := mustDecode(mod, utf8, str, byteLength, "str")
+
+	rt.TextFB(s, x, y)
 }
 
-func (rt *Runtime) getString(ctx context.Context, mod api.Module, txt int32) string {
-	letter, _ := mod.Memory().ReadByte(ctx, uint32(txt))
+// textUtf16 draws text using the built-in system font from a UTF-16 encoded
+// input.
+func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64) {
+	str := int32(params[0])
+	byteLength := int32(params[1])
+	x := int32(params[2])
+	y := int32(params[3])
+
+	s := mustDecode(mod, utf16, str, byteLength, "str")
+
+	rt.TextFB(s, x, y)
+}
+
+func getString(mem api.Memory, txt int32) string {
+	letter, _ := mem.ReadByte(uint32(txt))
 	text := ""
 	offset := 0
 	for letter != 0 {
 		text += string(letter)
 		offset++
-		letter, _ = mod.Memory().ReadByte(ctx, uint32(txt)+uint32(offset))
+		letter, _ = mem.ReadByte(uint32(txt) + uint32(offset))
 	}
 
 	return text
+}
+
+var (
+	utf8  = unicode.UTF8
+	utf16 = unicode.UTF16(unicode.BigEndian, unicode.UseBOM)
+)
+
+func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) (s string) {
+	var err error
+	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
+		panic(fmt.Errorf("out of memory reading %s", field))
+	} else if encoding == utf8 {
+		return string(b)
+	} else if s, err = encoding.NewDecoder().String(string(b)); err != nil {
+		panic(fmt.Errorf("error reading %s: %v", field, err))
+	}
+	return
 }

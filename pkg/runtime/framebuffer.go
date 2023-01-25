@@ -100,12 +100,12 @@ func compressBuffer(buffer []byte, bpp2 bool) []byte {
 
 func (rt *Runtime) ClearFB() {
 	for pos := MemFramebuffer; pos < MemFramebuffer+SizeFramebuffer; pos++ {
-		rt.cart.Memory().WriteByte(rt.ctx, pos, 0)
+		rt.cart.Memory().WriteByte(pos, 0)
 	}
 }
 
 func (rt *Runtime) RenderFB(screen *ebiten.Image) {
-	palette, _ := rt.cart.Memory().Read(rt.ctx, MemPalette, SizePalette)
+	palette, _ := rt.cart.Memory().Read(MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
 			A: 0xff,
@@ -133,7 +133,7 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 		},
 	}
 
-	framebuffer, _ := rt.cart.Memory().Read(rt.ctx, MemFramebuffer, SizeFramebuffer)
+	framebuffer, _ := rt.cart.Memory().Read(MemFramebuffer, SizeFramebuffer)
 	for offY, pixel := range framebuffer {
 		colorIndex := []byte{
 			pixel & 3,
@@ -152,7 +152,7 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 }
 
 func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
-	drawColors, _ := rt.cart.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+	drawColors, _ := rt.cart.Memory().Read(MemDrawColors, SizeDrawColors)
 
 	var (
 		colors             uint16 = uint16(drawColors[0]) | (uint16(drawColors[1]) << 8)
@@ -207,7 +207,7 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 }
 
 func (rt *Runtime) GetColorByIndex(index int) byte {
-	drawColors, _ := rt.cart.Memory().Read(rt.ctx, MemDrawColors, SizeDrawColors)
+	drawColors, _ := rt.cart.Memory().Read(MemDrawColors, SizeDrawColors)
 	switch index {
 	case 0:
 		return drawColors[0] & 0xf
@@ -258,8 +258,8 @@ func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
 	}
 }
 
-func (rt *Runtime) HLineFB(color byte, startX, y, l int32) {
-	endX := startX + l
+func (rt *Runtime) HLineFB(color byte, startX, y, len int32) {
+	endX := startX + len
 
 	// Make sure it's from left to right
 	if startX > endX {
@@ -295,8 +295,8 @@ func (rt *Runtime) HLineFB(color byte, startX, y, l int32) {
 	}
 }
 
-func (rt *Runtime) VLineFB(color byte, x, startY, l int32) {
-	endY := startY + l
+func (rt *Runtime) VLineFB(color byte, x, startY, len int32) {
+	endY := startY + len
 
 	// Make sure it's from top to bottom
 	if startY > endY {
@@ -333,12 +333,12 @@ func (rt *Runtime) VLineFB(color byte, x, startY, l int32) {
 func (rt *Runtime) PointFB(color byte, x, y int32) {
 	var (
 		idx             int32 = (y*160 + x) >> 2
-		currentValue, _       = rt.cart.Memory().ReadByte(rt.ctx, uint32(idx)+MemFramebuffer)
+		currentValue, _       = rt.cart.Memory().ReadByte(uint32(idx) + MemFramebuffer)
 		shift           int32 = (x & 0x3) << 1
 		mask            int32 = 0x3 << shift
 		value           uint8 = uint8((int32(color) << shift) | (int32(currentValue) & ^mask))
 	)
-	rt.cart.Memory().WriteByte(rt.ctx, uint32(idx)+MemFramebuffer, value)
+	rt.cart.Memory().WriteByte(uint32(idx)+MemFramebuffer, value)
 }
 
 func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
@@ -366,16 +366,22 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 	}
 }
 
-func (rt *Runtime) RectFB(x, y, w, h int32) {
+func (rt *Runtime) OvalFB(x, y, width, height int32) {}
+
+func (rt *Runtime) RectFB(x, y, width, height int32) {
 	// border := rt.GetColorByIndex(1)
 	fill := rt.GetColorByIndex(0)
 
-	for line := y; line < y+h; line++ {
-		rt.LineFB(fill, x, line, x+w, line)
+	for line := y; line < y+height; line++ {
+		rt.LineFB(fill, x, line, x+width, line)
 	}
 
-	// rt.HLineFB(border, x, y, w)
-	// rt.HLineFB(border, x, y+h, w)
-	// rt.VLineFB(border, x, y, h)
-	// rt.VLineFB(border, x+w-1, y, h)
+	// rt.HLineFB(border, x, y, width)
+	// rt.HLineFB(border, x, y+height, width)
+	// rt.VLineFB(border, x, y, height)
+	// rt.VLineFB(border, x+width-1, y, height)
+}
+
+func (rt *Runtime) Tone(frequency, duration, volume, flags int32) {
+	//log.Printf("tone: %d / %d / %d / %d", frequency, duration, volume, flags)
 }

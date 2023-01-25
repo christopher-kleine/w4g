@@ -1,5 +1,13 @@
 package runtime
 
-func (rt *Runtime) Tone(freq, dur, vol, flags int32) {
-	//log.Printf("Tone: %d / %d / %d / %d", freq, dur, vol, flags)
+import "context"
+
+// tone plays a sound tone.
+func (rt *Runtime) tone(_ context.Context, params []uint64) {
+	frequency := int32(params[0])
+	duration := int32(params[1])
+	volume := int32(params[2])
+	flags := int32(params[3])
+
+	rt.Tone(frequency, duration, volume, flags)
 }
