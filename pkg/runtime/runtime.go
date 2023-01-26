@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -210,12 +211,15 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 		return err
 	}
 
-	rt.cart.Memory().Write(MemPalette, []byte{
-		0xcf, 0xf8, 0xe0, 0xff,
-		0x6c, 0xc0, 0x86, 0xff,
-		0x50, 0x68, 0x30, 0xff,
-		0x21, 0x18, 0x07, 0xff,
-	})
+	colors, _ := rt.cart.Memory().Read(MemPalette, 16)
+	if bytes.Equal(colors, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
+		rt.cart.Memory().Write(MemPalette, []byte{
+			0xcf, 0xf8, 0xe0, 0xff,
+			0x6c, 0xc0, 0x86, 0xff,
+			0x50, 0x68, 0x30, 0xff,
+			0x21, 0x18, 0x07, 0xff,
+		})
+	}
 
 	fn := rt.cart.ExportedFunction("start")
 	if fn != nil {

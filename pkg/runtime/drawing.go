@@ -136,8 +136,6 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 	x := int32(params[2])
 	y := int32(params[3])
 
-	log.Printf("textUtf8: str=%d, byteLength=%d, x=%d, y=%d", str, byteLength, x, y)
-
 	s := mustDecode(mod, utf8, str, byteLength, "str")
 
 	rt.TextFB(string(s), x, y)
