@@ -9,5 +9,5 @@ func (rt *Runtime) tone(_ context.Context, params []uint64) {
 	volume := int32(params[2])
 	flags := int32(params[3])
 
-	rt.Tone(frequency, duration, volume, flags)
+	rt.APU.Tone(frequency, duration, volume, flags)
 }

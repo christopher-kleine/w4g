@@ -52,7 +52,7 @@ func (rt *Runtime) blitFB(sprite []byte, x, y, width, height, srcX, srcY, stride
 	flipY := flags&4 == 4
 	rotate := flags&8 == 8
 
-	rt.BlitFB(sprite, x, y, width, height, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
+	rt.VPU.BlitFB(sprite, x, y, width, height, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
 }
 
 // line draws a line between two points.
@@ -62,12 +62,12 @@ func (rt *Runtime) line(_ context.Context, params []uint64) {
 	x2 := int32(params[2])
 	y2 := int32(params[3])
 
-	dc0 := rt.GetColorByIndex(0)
+	dc0 := rt.VPU.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	var strokeColor uint8 = (dc0 - 1) & 0x3
-	rt.LineFB(strokeColor, x1, y1, x2, y2)
+	rt.VPU.LineFB(strokeColor, x1, y1, x2, y2)
 }
 
 // hline draws a horizontal line.
@@ -76,12 +76,12 @@ func (rt *Runtime) hline(_ context.Context, params []uint64) {
 	y := int32(params[1])
 	len := int32(params[2])
 
-	dc0 := rt.GetColorByIndex(0)
+	dc0 := rt.VPU.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.HLineFB(strokeColor, x, y, len)
+	rt.VPU.HLineFB(strokeColor, x, y, len)
 }
 
 // vline draws a vertical line.
@@ -90,12 +90,12 @@ func (rt *Runtime) vline(_ context.Context, params []uint64) {
 	y := int32(params[1])
 	len := int32(params[2])
 
-	dc0 := rt.GetColorByIndex(0)
+	dc0 := rt.VPU.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.VLineFB(strokeColor, x, y, len)
+	rt.VPU.VLineFB(strokeColor, x, y, len)
 }
 
 // oval draws an oval (or circle).
@@ -105,7 +105,7 @@ func (rt *Runtime) oval(_ context.Context, params []uint64) {
 	width := int32(params[2])
 	height := int32(params[3])
 
-	rt.OvalFB(x, y, width, height)
+	rt.VPU.OvalFB(x, y, width, height)
 }
 
 // rect draws a rectangle.
@@ -115,7 +115,7 @@ func (rt *Runtime) rect(_ context.Context, params []uint64) {
 	width := int32(params[2])
 	height := int32(params[3])
 
-	rt.RectFB(x, y, width, height)
+	rt.VPU.RectFB(x, y, width, height)
 }
 
 // text draws text using the built-in system font from a *zero-terminated*
@@ -125,7 +125,7 @@ func (rt *Runtime) text(_ context.Context, mod api.Module, params []uint64) {
 	x := int32(params[1])
 	y := int32(params[2])
 
-	rt.TextFB(getString(mod.Memory(), str), x, y)
+	rt.VPU.TextFB(getString(mod.Memory(), str), x, y)
 }
 
 // textUtf8 draws text using the built-in system font from a UTF-8 encoded
@@ -138,7 +138,7 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 
 	s := mustDecode(mod, utf8, str, byteLength, "str")
 
-	rt.TextFB(string(s), x, y)
+	rt.VPU.TextFB(string(s), x, y)
 }
 
 // textUtf16 draws text using the built-in system font from a UTF-16 encoded
@@ -152,7 +152,7 @@ func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64)
 	s := mustDecode(mod, utf16, str, byteLength, "str")
 	text, _ := DecodeUTF16(s)
 
-	rt.TextFB(text, x, y)
+	rt.VPU.TextFB(text, x, y)
 }
 
 func DecodeUTF16(b []byte) (string, error) {

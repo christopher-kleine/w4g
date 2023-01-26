@@ -1,11 +1,11 @@
 package runtime
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
 	"image/png"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,32 +17,6 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
-)
-
-const (
-	MemPalette      uint32 = 0x0004
-	MemDrawColors   uint32 = 0x0014
-	MemGamepads     uint32 = 0x0016
-	MemMouseX       uint32 = 0x001a
-	MemMouseY       uint32 = 0x001c
-	MemMouseButtons uint32 = 0x001e
-	MemSystemFlags  uint32 = 0x001f
-	MemReserved     uint32 = 0x0020
-	MemFramebuffer  uint32 = 0x00a0
-	MemUser         uint32 = 0x19a0
-)
-
-const (
-	SizePalette      uint32 = 16
-	SizeDrawColors   uint32 = 2
-	SizeGamepads     uint32 = 1
-	SizeMouseX       uint32 = 2
-	SizeMouseY       uint32 = 2
-	SizeMouseButtons uint32 = 1
-	SizeSystemFlags  uint32 = 1
-	SizeReserved     uint32 = 128
-	SizeFramebuffer  uint32 = 6400
-	SizeUser         uint32 = 58976
 )
 
 const (
@@ -93,6 +67,9 @@ type Runtime struct {
 	ctx      context.Context
 	showFPS  bool
 	Encoder  encoders.Encoder
+	VPU      *VPU
+	APU      *APU
+	Storage  io.ReadWriter
 }
 
 var (
@@ -211,14 +188,12 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 		return err
 	}
 
-	colors, _ := rt.cart.Memory().Read(MemPalette, 16)
-	if bytes.Equal(colors, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
-		rt.cart.Memory().Write(MemPalette, []byte{
-			0xcf, 0xf8, 0xe0, 0xff,
-			0x6c, 0xc0, 0x86, 0xff,
-			0x50, 0x68, 0x30, 0xff,
-			0x21, 0x18, 0x07, 0xff,
-		})
+	rt.VPU = &VPU{
+		Memory: rt.cart.Memory,
+	}
+	rt.APU = &APU{}
+	rt.Storage = &Storage{
+		Data: make([]byte, 1024),
 	}
 
 	fn := rt.cart.ExportedFunction("start")
@@ -258,7 +233,7 @@ func (rt *Runtime) Screenshot(screen *ebiten.Image) {
 
 func (rt *Runtime) Draw(screen *ebiten.Image) {
 	fmt.Print("\r")
-	rt.RenderFB(screen)
+	rt.VPU.RenderFB(screen)
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
 		rt.Screenshot(screen)
@@ -292,7 +267,7 @@ func (rt *Runtime) KeyState(keys map[ebiten.Key]byte) byte {
 func (rt *Runtime) Update() error {
 	SystemFlags, _ := rt.cart.Memory().ReadByte(MemSystemFlags)
 	if SystemFlags&FlagPreserveScreen == 0 {
-		rt.ClearFB()
+		rt.VPU.Clear()
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF10) {

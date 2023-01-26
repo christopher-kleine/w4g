@@ -1,11 +1,13 @@
 package runtime
 
 import (
+	"bytes"
 	"image/color"
 	"math"
 
+	"github.com/christopher-kleine/w4g/pkg/tools"
 	"github.com/hajimehoshi/ebiten/v2"
-	"golang.org/x/exp/constraints"
+	"github.com/tetratelabs/wazero/api"
 )
 
 const (
@@ -13,29 +15,31 @@ const (
 	HEIGHT = 160
 )
 
-func min[T constraints.Integer](a, b T) T {
-	if a <= b {
-		return a
-	}
+const (
+	MemPalette      uint32 = 0x0004
+	MemDrawColors   uint32 = 0x0014
+	MemGamepads     uint32 = 0x0016
+	MemMouseX       uint32 = 0x001a
+	MemMouseY       uint32 = 0x001c
+	MemMouseButtons uint32 = 0x001e
+	MemSystemFlags  uint32 = 0x001f
+	MemReserved     uint32 = 0x0020
+	MemFramebuffer  uint32 = 0x00a0
+	MemUser         uint32 = 0x19a0
+)
 
-	return b
-}
-
-func max[T constraints.Integer](a, b T) T {
-	if a >= b {
-		return a
-	}
-
-	return b
-}
-
-func ternary[T any](eq bool, a, b T) T {
-	if eq {
-		return a
-	}
-
-	return b
-}
+const (
+	SizePalette      uint32 = 16
+	SizeDrawColors   uint32 = 2
+	SizeGamepads     uint32 = 1
+	SizeMouseX       uint32 = 2
+	SizeMouseY       uint32 = 2
+	SizeMouseButtons uint32 = 1
+	SizeSystemFlags  uint32 = 1
+	SizeReserved     uint32 = 128
+	SizeFramebuffer  uint32 = 6400
+	SizeUser         uint32 = 58976
+)
 
 func decompressBuffer(buffer []byte, bpp2 bool) []byte {
 	result := []byte{}
@@ -99,17 +103,33 @@ func compressBuffer(buffer []byte, bpp2 bool) []byte {
 	return result
 }
 
+type VPU struct {
+	Memory func() api.Memory
+}
+
 // This file implements direct access to the framebuffer.
 // Other Drawing functions may use them.
 
-func (rt *Runtime) ClearFB() {
-	for pos := MemFramebuffer; pos < MemFramebuffer+SizeFramebuffer; pos++ {
-		rt.cart.Memory().WriteByte(pos, 0)
+func (vpu *VPU) Init() {
+	colors, _ := vpu.Memory().Read(MemPalette, 16)
+	if bytes.Equal(colors, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}) {
+		vpu.Memory().Write(MemPalette, []byte{
+			0xcf, 0xf8, 0xe0, 0xff,
+			0x6c, 0xc0, 0x86, 0xff,
+			0x50, 0x68, 0x30, 0xff,
+			0x21, 0x18, 0x07, 0xff,
+		})
 	}
 }
 
-func (rt *Runtime) RenderFB(screen *ebiten.Image) {
-	palette, _ := rt.cart.Memory().Read(MemPalette, SizePalette)
+func (vpu *VPU) Clear() {
+	for pos := MemFramebuffer; pos < MemFramebuffer+SizeFramebuffer; pos++ {
+		vpu.Memory().WriteByte(pos, 0)
+	}
+}
+
+func (vpu *VPU) RenderFB(screen *ebiten.Image) {
+	palette, _ := vpu.Memory().Read(MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
 			A: 0xff,
@@ -137,7 +157,7 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 		},
 	}
 
-	framebuffer, _ := rt.cart.Memory().Read(MemFramebuffer, SizeFramebuffer)
+	framebuffer, _ := vpu.Memory().Read(MemFramebuffer, SizeFramebuffer)
 	for offY, pixel := range framebuffer {
 		colorIndex := []byte{
 			pixel & 3,
@@ -155,8 +175,8 @@ func (rt *Runtime) RenderFB(screen *ebiten.Image) {
 	}
 }
 
-func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
-	drawColors, _ := rt.cart.Memory().Read(MemDrawColors, SizeDrawColors)
+func (vpu *VPU) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
+	drawColors, _ := vpu.Memory().Read(MemDrawColors, SizeDrawColors)
 
 	var (
 		colors             uint16 = uint16(drawColors[0]) | (uint16(drawColors[1]) << 8)
@@ -173,23 +193,23 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 
 	if rotate {
 		flipX = !flipX
-		clipXMin = max(0, dstY) - dstY
-		clipYMin = max(0, dstX) - dstX
-		clipXMax = min(w, WIDTH-dstY)
-		clipYMax = min(h, WIDTH-dstX)
+		clipXMin = tools.Max(0, dstY) - dstY
+		clipYMin = tools.Max(0, dstX) - dstX
+		clipXMax = tools.Min(w, WIDTH-dstY)
+		clipYMax = tools.Min(h, WIDTH-dstX)
 	} else {
-		clipXMin = max(0, dstX) - dstX
-		clipYMin = max(0, dstY) - dstY
-		clipXMax = min(w, WIDTH-dstX)
-		clipYMax = min(h, WIDTH-dstY)
+		clipXMin = tools.Max(0, dstX) - dstX
+		clipYMin = tools.Max(0, dstY) - dstY
+		clipXMax = tools.Min(w, WIDTH-dstX)
+		clipYMax = tools.Min(h, WIDTH-dstY)
 	}
 
 	for y := clipYMin; y < clipYMax; y++ {
 		for x := clipXMin; x < clipXMax; x++ {
-			tx = dstX + ternary(rotate, y, x)
-			ty = dstY + ternary(rotate, x, y)
-			sx = srcX + ternary(flipX, w-x-1, x)
-			sy = srcY + ternary(flipY, h-y-1, y)
+			tx = dstX + tools.Ternary(rotate, y, x)
+			ty = dstY + tools.Ternary(rotate, x, y)
+			sx = srcX + tools.Ternary(flipX, w-x-1, x)
+			sy = srcY + tools.Ternary(flipY, h-y-1, y)
 
 			bitIndex = sy*stride + sx
 			if bpp2 {
@@ -204,14 +224,14 @@ func (rt *Runtime) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride in
 
 			dc = uint8((colors >> (colorIdx << 2)) & 0x0f)
 			if dc != 0 {
-				rt.PointUnclippedFB(dc-1, tx, ty)
+				vpu.PointUnclippedFB(dc-1, tx, ty)
 			}
 		}
 	}
 }
 
-func (rt *Runtime) GetColorByIndex(index int) byte {
-	drawColors, _ := rt.cart.Memory().Read(MemDrawColors, SizeDrawColors)
+func (vpu *VPU) GetColorByIndex(index int) byte {
+	drawColors, _ := vpu.Memory().Read(MemDrawColors, SizeDrawColors)
 	switch index {
 	case 0:
 		return drawColors[0] & 0xf
@@ -227,7 +247,7 @@ func (rt *Runtime) GetColorByIndex(index int) byte {
 	}
 }
 
-func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
+func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
 	if color == 0 {
 		return
 	}
@@ -238,7 +258,7 @@ func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
 	}
 
 	var dx int32 = int32(math.Abs(float64(x2 - x1)))
-	var sx int32 = ternary[int32](x1 < x2, 1, -1)
+	var sx int32 = tools.Ternary[int32](x1 < x2, 1, -1)
 	var dy int32 = y2 - y1
 	var err int32 = -dy
 	if dx > dy {
@@ -248,7 +268,7 @@ func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
 	var e2 int32
 
 	for {
-		rt.PointUnclippedFB(color, x1, y1)
+		vpu.PointUnclippedFB(color, x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}
@@ -264,7 +284,7 @@ func (rt *Runtime) LineFB(color byte, x1, y1, x2, y2 int32) {
 	}
 }
 
-func (rt *Runtime) HLineFB(color byte, startX, y, len int32) {
+func (vpu *VPU) HLineFB(color byte, startX, y, len int32) {
 	endX := startX + len
 
 	// Make sure it's from left to right
@@ -295,11 +315,11 @@ func (rt *Runtime) HLineFB(color byte, startX, y, len int32) {
 	}
 
 	for x := startX; x < endX; x++ {
-		rt.PointFB(color, x, y)
+		vpu.PointFB(color, x, y)
 	}
 }
 
-func (rt *Runtime) HLineUnclippedFB(color byte, startX, y, endX int32) {
+func (vpu *VPU) HLineUnclippedFB(color byte, startX, y, endX int32) {
 	if y >= 0 && y < HEIGHT {
 		if startX < 0 {
 			startX = 0
@@ -311,42 +331,42 @@ func (rt *Runtime) HLineUnclippedFB(color byte, startX, y, endX int32) {
 
 		if startX < endX {
 			for x := startX; x < endX; x++ {
-				rt.PointUnclippedFB(color, x, y)
+				vpu.PointUnclippedFB(color, x, y)
 			}
 		}
 	}
 }
 
-func (rt *Runtime) VLineFB(color byte, x, y, len int32) {
+func (vpu *VPU) VLineFB(color byte, x, y, len int32) {
 	if y+len <= 0 || x < 0 || x >= WIDTH || color == 0 {
 		return
 	}
 
-	startY := max(0, y)
-	endY := min(HEIGHT, y+len)
+	startY := tools.Max(0, y)
+	endY := tools.Min(HEIGHT, y+len)
 	for yy := startY; yy < endY; yy++ {
-		rt.PointFB(color, x, yy)
+		vpu.PointFB(color, x, yy)
 	}
 }
 
-func (rt *Runtime) PointFB(color byte, x, y int32) {
+func (vpu *VPU) PointFB(color byte, x, y int32) {
 	var (
 		idx             int32 = (y*HEIGHT + x) >> 2
-		currentValue, _       = rt.cart.Memory().ReadByte(uint32(idx) + MemFramebuffer)
+		currentValue, _       = vpu.Memory().ReadByte(uint32(idx) + MemFramebuffer)
 		shift           int32 = (x & 0x3) << 1
 		mask            int32 = 0x3 << shift
 		value           uint8 = uint8((int32(color) << shift) | (int32(currentValue) & ^mask))
 	)
-	rt.cart.Memory().WriteByte(uint32(idx)+MemFramebuffer, value)
+	vpu.Memory().WriteByte(uint32(idx)+MemFramebuffer, value)
 }
 
-func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
+func (vpu *VPU) PointUnclippedFB(colorIndex byte, x, y int32) {
 	if x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT {
-		rt.PointFB(colorIndex, x, y)
+		vpu.PointFB(colorIndex, x, y)
 	}
 }
 
-func (rt *Runtime) TextFB(txt string, x, y int32) {
+func (vpu *VPU) TextFB(txt string, x, y int32) {
 	currX := x
 	currY := y
 	for _, letter := range []byte(txt) {
@@ -363,15 +383,15 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 			currY += 8
 
 		default:
-			rt.BlitFB(font, currX, currY, 8, 8, 0, (l-32)<<3, 8, false, false, false, false)
+			vpu.BlitFB(font, currX, currY, 8, 8, 0, (l-32)<<3, 8, false, false, false, false)
 			currX += 8
 		}
 	}
 }
 
-func (rt *Runtime) OvalFB(x, y, width, height int32) {
-	dc0 := rt.GetColorByIndex(0)
-	dc1 := rt.GetColorByIndex(1)
+func (vpu *VPU) OvalFB(x, y, width, height int32) {
+	dc0 := vpu.GetColorByIndex(0)
+	dc1 := vpu.GetColorByIndex(1)
 
 	if dc1 == 0xf {
 		return
@@ -403,17 +423,17 @@ func (rt *Runtime) OvalFB(x, y, width, height int32) {
 	var err2 int32
 
 	for {
-		rt.PointUnclippedFB(strokeColor, east, north)
-		rt.PointUnclippedFB(strokeColor, west, north)
-		rt.PointUnclippedFB(strokeColor, west, south)
-		rt.PointUnclippedFB(strokeColor, east, south)
+		vpu.PointUnclippedFB(strokeColor, east, north)
+		vpu.PointUnclippedFB(strokeColor, west, north)
+		vpu.PointUnclippedFB(strokeColor, west, south)
+		vpu.PointUnclippedFB(strokeColor, east, south)
 
 		start := west + 1
 		len := east - start
 
 		if dc0 != 0 && len > 0 {
-			rt.HLineUnclippedFB(fillColor, start, north, east)
-			rt.HLineUnclippedFB(fillColor, start, south, east)
+			vpu.HLineUnclippedFB(fillColor, start, north, east)
+			vpu.HLineUnclippedFB(fillColor, start, south, east)
 		}
 		err2 = 2 * err
 		if err2 <= dy {
@@ -438,31 +458,31 @@ func (rt *Runtime) OvalFB(x, y, width, height int32) {
 
 	// Make sure north and south have moved the entire way so top/bottom aren't missing
 	for north-south < height {
-		rt.PointUnclippedFB(strokeColor, west-1, north) /*   II. Quadrant    */
-		rt.PointUnclippedFB(strokeColor, east+1, north) /*   I. Quadrant     */
+		vpu.PointUnclippedFB(strokeColor, west-1, north) /*   II. Quadrant    */
+		vpu.PointUnclippedFB(strokeColor, east+1, north) /*   I. Quadrant     */
 		north += 1
-		rt.PointUnclippedFB(strokeColor, west-1, south) /*   III. Quadrant   */
-		rt.PointUnclippedFB(strokeColor, east+1, south) /*   IV. Quadrant    */
+		vpu.PointUnclippedFB(strokeColor, west-1, south) /*   III. Quadrant   */
+		vpu.PointUnclippedFB(strokeColor, east+1, south) /*   IV. Quadrant    */
 		south -= 1
 	}
 }
 
-func (rt *Runtime) RectFB(x, y, width, height int32) {
-	startX := max(0, x)
-	startY := max(0, y)
+func (vpu *VPU) RectFB(x, y, width, height int32) {
+	startX := tools.Max(0, x)
+	startY := tools.Max(0, y)
 	endXUnclamp := x + width
 	endYUnclamp := y + height
-	endX := min(WIDTH, endXUnclamp)
-	endY := min(HEIGHT, endYUnclamp)
+	endX := tools.Min(WIDTH, endXUnclamp)
+	endY := tools.Min(HEIGHT, endYUnclamp)
 
-	dc0 := rt.GetColorByIndex(0)
-	dc1 := rt.GetColorByIndex(1)
+	dc0 := vpu.GetColorByIndex(0)
+	dc1 := vpu.GetColorByIndex(1)
 
 	if dc0 != 0 {
 		dc0 = (dc0 - 1) & 0x3
 		for yy := startY; yy < endY; yy++ {
 			for xx := startX; xx < endX; xx++ {
-				rt.PointFB(dc0, xx, yy)
+				vpu.PointFB(dc0, xx, yy)
 			}
 		}
 	}
@@ -473,33 +493,29 @@ func (rt *Runtime) RectFB(x, y, width, height int32) {
 		// Left edge
 		if x >= 0 && x < WIDTH {
 			for yy := startY; yy < endY; yy++ {
-				rt.PointFB(dc1, x, yy)
+				vpu.PointFB(dc1, x, yy)
 			}
 		}
 
 		// Right edge
 		if endXUnclamp > 0 && endXUnclamp <= WIDTH {
 			for yy := startY; yy < endY; yy++ {
-				rt.PointFB(dc1, endXUnclamp-1, yy)
+				vpu.PointFB(dc1, endXUnclamp-1, yy)
 			}
 		}
 
 		// Top edge
 		if y >= 0 && y < HEIGHT {
 			for xx := startX; xx < endX; xx++ {
-				rt.PointFB(dc1, xx, y)
+				vpu.PointFB(dc1, xx, y)
 			}
 		}
 
 		// Bottom edge
 		if endYUnclamp > 0 && endYUnclamp <= HEIGHT {
 			for xx := startX; xx < endX; xx++ {
-				rt.PointFB(dc1, xx, endYUnclamp-1)
+				vpu.PointFB(dc1, xx, endYUnclamp-1)
 			}
 		}
 	}
-}
-
-func (rt *Runtime) Tone(frequency, duration, volume, flags int32) {
-	//log.Printf("tone: %d / %d / %d / %d", frequency, duration, volume, flags)
 }
