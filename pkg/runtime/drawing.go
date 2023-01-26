@@ -140,7 +140,7 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 
 	s := mustDecode(mod, utf8, str, byteLength, "str")
 
-	rt.TextFB(s, x, y)
+	rt.TextFB(string(s), x, y)
 }
 
 // textUtf16 draws text using the built-in system font from a UTF-16 encoded
@@ -151,12 +151,10 @@ func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64)
 	x := int32(params[2])
 	y := int32(params[3])
 
-	log.Printf("textUtf16: str=%d, byteLength=%d, x=%d, y=%d", str, byteLength, x, y)
-
 	s := mustDecode(mod, utf16, str, byteLength, "str")
-	// s, _ = DecodeUTF16([]byte(s))
+	text, _ := DecodeUTF16(s)
 
-	rt.TextFB(s, x, y)
+	rt.TextFB(text, x, y)
 }
 
 func DecodeUTF16(b []byte) (string, error) {
@@ -200,16 +198,26 @@ var (
 	utf16 = unicode.UTF16(unicode.BigEndian, unicode.UseBOM)
 )
 
-func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) (s string) {
-	var err error
-	log.Printf("mustDecode: str=%d, byteLength=%d, field=%s", str, byteLength, field)
+func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) []byte {
+	//var err error
 	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
 		log.Printf("out of memory reading %s", field)
-	} else if encoding == utf8 {
-		return string(b)
-	} else if s, err = encoding.NewDecoder().String(string(b)); err != nil {
-		log.Printf("error reading %s: %v", field, err)
+	} else {
+		return b
 	}
-	log.Printf("mustDecode: returning %q", s)
-	return
+	return nil
 }
+
+// func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) (s string) {
+//	var err error
+//	log.Printf("mustDecode: str=%d, byteLength=%d, field=%s", str, byteLength, field)
+//	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
+//		log.Printf("out of memory reading %s", field)
+//	} else if encoding == utf8 {
+//		return string(b)
+//	} else if s, err = encoding.NewDecoder().String(string(b)); err != nil {
+//		log.Printf("error reading %s: %v", field, err)
+//	}
+//	log.Printf("mustDecode: returning %q", s)
+//	return
+//}

@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"image/color"
-	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -354,7 +353,7 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 		// for _, l := range txt {
 		// letter := l
 		l := int32(letter)
-		log.Printf("letter: %v / %c / %v / %c", letter, letter, l, l)
+		//log.Printf("letter: %v / %c / %v / %c", letter, letter, l, l)
 		switch letter {
 		case 0:
 			return
