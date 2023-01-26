@@ -1,8 +1,12 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log"
+	uutf16 "unicode/utf16"
+	uutf8 "unicode/utf8"
 
 	"github.com/tetratelabs/wazero/api"
 	"golang.org/x/text/encoding"
@@ -132,6 +136,8 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 	x := int32(params[2])
 	y := int32(params[3])
 
+	log.Printf("textUtf8: str=%d, byteLength=%d, x=%d, y=%d", str, byteLength, x, y)
+
 	s := mustDecode(mod, utf8, str, byteLength, "str")
 
 	rt.TextFB(s, x, y)
@@ -145,9 +151,35 @@ func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64)
 	x := int32(params[2])
 	y := int32(params[3])
 
+	log.Printf("textUtf16: str=%d, byteLength=%d, x=%d, y=%d", str, byteLength, x, y)
+
 	s := mustDecode(mod, utf16, str, byteLength, "str")
+	// s, _ = DecodeUTF16([]byte(s))
 
 	rt.TextFB(s, x, y)
+}
+
+func DecodeUTF16(b []byte) (string, error) {
+
+	if len(b)%2 != 0 {
+		return "", fmt.Errorf("Must have even length byte slice")
+	}
+
+	u16s := make([]uint16, 1)
+
+	ret := &bytes.Buffer{}
+
+	b8buf := make([]byte, 4)
+
+	lb := len(b)
+	for i := 0; i < lb; i += 2 {
+		u16s[0] = uint16(b[i]) + (uint16(b[i+1]) << 8)
+		r := uutf16.Decode(u16s)
+		n := uutf8.EncodeRune(b8buf, r[0])
+		ret.Write(b8buf[:n])
+	}
+
+	return ret.String(), nil
 }
 
 func getString(mem api.Memory, txt int32) string {
@@ -170,12 +202,14 @@ var (
 
 func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) (s string) {
 	var err error
+	log.Printf("mustDecode: str=%d, byteLength=%d, field=%s", str, byteLength, field)
 	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
-		panic(fmt.Errorf("out of memory reading %s", field))
+		log.Printf("out of memory reading %s", field)
 	} else if encoding == utf8 {
 		return string(b)
 	} else if s, err = encoding.NewDecoder().String(string(b)); err != nil {
-		panic(fmt.Errorf("error reading %s: %v", field, err))
+		log.Printf("error reading %s: %v", field, err)
 	}
+	log.Printf("mustDecode: returning %q", s)
 	return
 }

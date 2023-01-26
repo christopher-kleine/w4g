@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"image/color"
+	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -349,7 +350,11 @@ func (rt *Runtime) PointUnclippedFB(colorIndex byte, x, y int32) {
 func (rt *Runtime) TextFB(txt string, x, y int32) {
 	currX := x
 	currY := y
-	for _, letter := range txt {
+	for _, letter := range []byte(txt) {
+		// for _, l := range txt {
+		// letter := l
+		l := int32(letter)
+		log.Printf("letter: %v / %c / %v / %c", letter, letter, l, l)
 		switch letter {
 		case 0:
 			return
@@ -359,7 +364,7 @@ func (rt *Runtime) TextFB(txt string, x, y int32) {
 			currY += 8
 
 		default:
-			rt.BlitFB(font, currX, currY, 8, 8, 0, (letter-32)<<3, 8, false, false, false, false)
+			rt.BlitFB(font, currX, currY, 8, 8, 0, (l-32)<<3, 8, false, false, false, false)
 			currX += 8
 		}
 	}
