@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/christopher-kleine/lorca"
 	"github.com/christopher-kleine/w4g/pkg/encoders"
@@ -78,7 +77,7 @@ func runNative(c *cli.Context) error {
 		return err
 	}
 
-	err = rt.LoadCart(code, filepath.Base(cart))
+	err = rt.LoadCart(code, cart)
 	if err != nil {
 		return err
 	}
@@ -89,5 +88,5 @@ func runNative(c *cli.Context) error {
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOn)
 	err = ebiten.RunGame(rt)
 
-	return err
+	return rt.Close()
 }

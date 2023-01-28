@@ -3,14 +3,10 @@ package runtime
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"log"
-	uutf16 "unicode/utf16"
-	uutf8 "unicode/utf8"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/tetratelabs/wazero/api"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/unicode"
 )
 
 // blit copies pixels to the framebuffer.
@@ -66,8 +62,7 @@ func (rt *Runtime) line(_ context.Context, params []uint64) {
 	if dc0 == 0 {
 		return
 	}
-	var strokeColor uint8 = (dc0 - 1) & 0x3
-	rt.VPU.LineFB(strokeColor, x1, y1, x2, y2)
+	rt.VPU.LineFB(dc0, x1, y1, x2, y2)
 }
 
 // hline draws a horizontal line.
@@ -81,7 +76,7 @@ func (rt *Runtime) hline(_ context.Context, params []uint64) {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.VPU.HLineFB(strokeColor, x, y, len)
+	rt.VPU.HLineUnclippedFB(strokeColor, x, y, len)
 }
 
 // vline draws a vertical line.
@@ -136,7 +131,7 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 	x := int32(params[2])
 	y := int32(params[3])
 
-	s := mustDecode(mod, utf8, str, byteLength, "str")
+	s := readBytes(mod, str, byteLength)
 
 	rt.VPU.TextFB(string(s), x, y)
 }
@@ -149,16 +144,15 @@ func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64)
 	x := int32(params[2])
 	y := int32(params[3])
 
-	s := mustDecode(mod, utf16, str, byteLength, "str")
-	text, _ := DecodeUTF16(s)
+	s := readBytes(mod, str, byteLength)
+	text := DecodeUTF16(s)
 
 	rt.VPU.TextFB(text, x, y)
 }
 
-func DecodeUTF16(b []byte) (string, error) {
-
+func DecodeUTF16(b []byte) string {
 	if len(b)%2 != 0 {
-		return "", fmt.Errorf("Must have even length byte slice")
+		return ""
 	}
 
 	u16s := make([]uint16, 1)
@@ -170,12 +164,15 @@ func DecodeUTF16(b []byte) (string, error) {
 	lb := len(b)
 	for i := 0; i < lb; i += 2 {
 		u16s[0] = uint16(b[i]) + (uint16(b[i+1]) << 8)
-		r := uutf16.Decode(u16s)
-		n := uutf8.EncodeRune(b8buf, r[0])
-		ret.Write(b8buf[:n])
+		r := utf16.Decode(u16s)
+		n := utf8.EncodeRune(b8buf, r[0])
+		if n > 1 {
+			n = 1
+		}
+		ret.Write(b8buf[:0])
 	}
 
-	return ret.String(), nil
+	return ret.String()
 }
 
 func getString(mem api.Memory, txt int32) string {
@@ -191,31 +188,10 @@ func getString(mem api.Memory, txt int32) string {
 	return text
 }
 
-var (
-	utf8  = unicode.UTF8
-	utf16 = unicode.UTF16(unicode.BigEndian, unicode.UseBOM)
-)
-
-func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) []byte {
-	//var err error
-	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
-		log.Printf("out of memory reading %s", field)
-	} else {
+func readBytes(mod api.Module, start, byteLength int32) []byte {
+	if b, ok := mod.Memory().Read(uint32(start), uint32(byteLength)); ok {
 		return b
 	}
+
 	return nil
 }
-
-// func mustDecode(mod api.Module, encoding encoding.Encoding, str, byteLength int32, field string) (s string) {
-//	var err error
-//	log.Printf("mustDecode: str=%d, byteLength=%d, field=%s", str, byteLength, field)
-//	if b, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); !ok {
-//		log.Printf("out of memory reading %s", field)
-//	} else if encoding == utf8 {
-//		return string(b)
-//	} else if s, err = encoding.NewDecoder().String(string(b)); err != nil {
-//		log.Printf("error reading %s: %v", field, err)
-//	}
-//	log.Printf("mustDecode: returning %q", s)
-//	return
-//}

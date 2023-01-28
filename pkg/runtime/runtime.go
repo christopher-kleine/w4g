@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/christopher-kleine/w4g/pkg/encoders"
@@ -34,24 +35,26 @@ const (
 )
 
 var (
-	Player1Keys = map[ebiten.Key]byte{
-		ebiten.KeyLeft:  PadLeft,
-		ebiten.KeyRight: PadRight,
-		ebiten.KeyUp:    PadUp,
-		ebiten.KeyDown:  PadDown,
-		ebiten.KeyX:     PadX,
-		ebiten.KeySpace: PadX,
-		ebiten.KeyY:     PadY,
-		ebiten.KeyZ:     PadY,
-		ebiten.KeyC:     PadY,
-	}
-	Player2Keys = map[ebiten.Key]byte{
-		ebiten.KeyS:   PadLeft,
-		ebiten.KeyF:   PadRight,
-		ebiten.KeyE:   PadUp,
-		ebiten.KeyD:   PadDown,
-		ebiten.KeyQ:   PadX,
-		ebiten.KeyTab: PadY,
+	PlayerKeys = []map[ebiten.Key]byte{
+		{
+			ebiten.KeyLeft:  PadLeft,
+			ebiten.KeyRight: PadRight,
+			ebiten.KeyUp:    PadUp,
+			ebiten.KeyDown:  PadDown,
+			ebiten.KeyX:     PadX,
+			ebiten.KeySpace: PadX,
+			ebiten.KeyY:     PadY,
+			ebiten.KeyZ:     PadY,
+			ebiten.KeyC:     PadY,
+		},
+		{
+			ebiten.KeyS:   PadLeft,
+			ebiten.KeyF:   PadRight,
+			ebiten.KeyE:   PadUp,
+			ebiten.KeyD:   PadDown,
+			ebiten.KeyQ:   PadX,
+			ebiten.KeyTab: PadY,
+		},
 	}
 )
 
@@ -69,7 +72,7 @@ type Runtime struct {
 	Encoder  encoders.Encoder
 	VPU      *VPU
 	APU      *APU
-	Storage  io.ReadWriter
+	Storage  io.ReadWriteCloser
 }
 
 var (
@@ -181,7 +184,10 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 func (rt *Runtime) LoadCart(code []byte, name string) error {
 	var err error
 
-	rt.cartName = name
+	rt.cartName = filepath.Base(name)
+
+	rt.Storage = NewStorage(strings.TrimSuffix(name, filepath.Ext(name)) + ".disk")
+	rt.APU = &APU{}
 
 	rt.cart, err = rt.runtime.InstantiateModuleFromBinary(rt.ctx, code)
 	if err != nil {
@@ -191,10 +197,10 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 	rt.VPU = &VPU{
 		Memory: rt.cart.Memory,
 	}
-	rt.APU = &APU{}
-	rt.Storage = &Storage{
-		Data: make([]byte, 1024),
-	}
+
+	rt.VPU.Init()
+
+	rt.ApplyHacks()
 
 	fn := rt.cart.ExportedFunction("start")
 	if fn != nil {
@@ -204,10 +210,25 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 	return nil
 }
 
-func (rt *Runtime) Close() {
+func (rt *Runtime) ApplyHacks() {
+	// Samurai Revenge - Load game on start
+	fn := rt.cart.ExportedFunction("loadGame")
+	if fn != nil {
+		log.Println("loadGame")
+		fn.Call(rt.ctx)
+	}
+}
+
+func (rt *Runtime) Close() error {
+	if rt.Storage != nil {
+		rt.Storage.Close()
+	}
+
 	if rt.runtime != nil {
 		rt.runtime.Close(rt.ctx)
 	}
+
+	return nil
 }
 
 func (rt *Runtime) Screenshot(screen *ebiten.Image) {
@@ -232,7 +253,6 @@ func (rt *Runtime) Screenshot(screen *ebiten.Image) {
 }
 
 func (rt *Runtime) Draw(screen *ebiten.Image) {
-	fmt.Print("\r")
 	rt.VPU.RenderFB(screen)
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
@@ -252,16 +272,28 @@ func (rt *Runtime) Draw(screen *ebiten.Image) {
 	}
 }
 
-func (rt *Runtime) KeyState(keys map[ebiten.Key]byte) byte {
+func (rt *Runtime) KeyState(id byte) byte {
 	result := PadIdle
 
-	for key, value := range keys {
+	for key, value := range PlayerKeys[id] {
 		if ebiten.IsKeyPressed(key) {
 			result = result | value
 		}
 	}
 
 	return result
+}
+
+func (rt *Runtime) GamepadState(current byte, id ebiten.GamepadID) byte {
+	if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton0) {
+		current = current | PadX
+	}
+
+	if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton1) {
+		current = current | PadY
+	}
+
+	return current
 }
 
 func (rt *Runtime) Update() error {
@@ -278,8 +310,28 @@ func (rt *Runtime) Update() error {
 		}
 	}
 
-	rt.cart.Memory().WriteByte(MemGamepads+0*SizeGamepads, rt.KeyState(Player1Keys))
-	rt.cart.Memory().WriteByte(MemGamepads+1*SizeGamepads, rt.KeyState(Player2Keys))
+	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
+		rt.showFPS = !rt.showFPS
+	}
+
+	x, y := ebiten.CursorPosition()
+	rt.cart.Memory().WriteByte(MemMouseX, byte(x))
+	rt.cart.Memory().WriteByte(MemMouseY, byte(y))
+
+	button := byte(0)
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
+		button = button | 1
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonRight) {
+		button = button | 2
+	}
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonMiddle) {
+		button = button | 4
+	}
+	rt.cart.Memory().WriteByte(MemMouseButtons, button)
+
+	rt.cart.Memory().WriteByte(MemGamepads+0*SizeGamepads, rt.KeyState(0))
+	rt.cart.Memory().WriteByte(MemGamepads+1*SizeGamepads, rt.KeyState(1))
 	// rt.cart.Memory().WriteByte(MemGamepads+2*SizeGamepads, rt.KeyState(Player3Keys))
 	// rt.cart.Memory().WriteByte(MemGamepads+3*SizeGamepads, rt.KeyState(Player4Keys))
 

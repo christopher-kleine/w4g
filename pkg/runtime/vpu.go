@@ -41,68 +41,6 @@ const (
 	SizeUser         uint32 = 58976
 )
 
-func decompressBuffer(buffer []byte, bpp2 bool) []byte {
-	result := []byte{}
-
-	if bpp2 {
-		for _, pixel := range buffer {
-			pixels := []byte{
-				pixel & 3,
-				(pixel >> 2) & 3,
-				(pixel >> 4) & 3,
-				(pixel >> 6) & 3,
-			}
-			result = append(result, pixels...)
-		}
-	} else {
-		for _, pixel := range buffer {
-			pixels := []byte{
-				pixel & 1,
-				(pixel >> 1) & 1,
-				(pixel >> 2) & 1,
-				(pixel >> 3) & 1,
-				(pixel >> 4) & 1,
-				(pixel >> 5) & 1,
-				(pixel >> 6) & 1,
-				(pixel >> 7) & 1,
-			}
-			result = append(result, pixels...)
-		}
-	}
-
-	return result
-}
-
-func compressBuffer(buffer []byte, bpp2 bool) []byte {
-	result := []byte{}
-
-	if bpp2 {
-		for index := 0; index < len(buffer); index = index + 4 {
-			p0 := buffer[index]
-			p1 := buffer[index+1] << 2
-			p2 := buffer[index+2] << 4
-			p3 := buffer[index+3] << 6
-			pixel := p0 | p1 | p2 | p3
-			result = append(result, pixel)
-		}
-	} else {
-		for index := 0; index < len(buffer); index = index + 8 {
-			p0 := buffer[index]
-			p1 := buffer[index+1] << 1
-			p2 := buffer[index+2] << 2
-			p3 := buffer[index+3] << 3
-			p4 := buffer[index+4] << 4
-			p5 := buffer[index+5] << 5
-			p6 := buffer[index+6] << 6
-			p7 := buffer[index+7] << 7
-			pixel := p0 | p1 | p2 | p3 | p4 | p5 | p6 | p7
-			result = append(result, pixel)
-		}
-	}
-
-	return result
-}
-
 type VPU struct {
 	Memory func() api.Memory
 }
@@ -252,6 +190,8 @@ func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
 		return
 	}
 
+	color--
+
 	if y1 > y2 {
 		x1, x2 = x2, x1
 		y1, y2 = y2, y1
@@ -285,38 +225,44 @@ func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
 }
 
 func (vpu *VPU) HLineFB(color byte, startX, y, len int32) {
-	endX := startX + len
+	// endX := startX + len
 
-	// Make sure it's from left to right
-	if startX > endX {
-		startX, endX = endX, startX
-	}
-
-	// Is the line even visible?
-	if y >= HEIGHT || y < 0 {
-		return
-	}
-	if endX < 0 || startX >= WIDTH {
+	if color == 0 {
 		return
 	}
 
-	// Stay in bound
-	if endX > 159 {
-		endX = 159
-	}
-	if endX < 0 {
-		endX = 0
-	}
-	if startX > 159 {
-		startX = 159
-	}
-	if startX < 0 {
-		startX = 0
-	}
+	vpu.HLineUnclippedFB(color-1, startX, y, startX+len)
 
-	for x := startX; x < endX; x++ {
-		vpu.PointFB(color, x, y)
-	}
+	// // Make sure it's from left to right
+	// if startX > endX {
+	// 	startX, endX = endX, startX
+	// }
+
+	// // Is the line even visible?
+	// if y >= HEIGHT || y < 0 {
+	// 	return
+	// }
+	// if endX < 0 || startX >= WIDTH {
+	// 	return
+	// }
+
+	// // Stay in bound
+	// if endX > 159 {
+	// 	endX = 159
+	// }
+	// if endX < 0 {
+	// 	endX = 0
+	// }
+	// if startX > 159 {
+	// 	startX = 159
+	// }
+	// if startX < 0 {
+	// 	startX = 0
+	// }
+
+	// for x := startX; x < endX; x++ {
+	// 	vpu.PointFB(color, x, y)
+	// }
 }
 
 func (vpu *VPU) HLineUnclippedFB(color byte, startX, y, endX int32) {
