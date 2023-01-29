@@ -313,6 +313,13 @@ func (rt *Runtime) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyF11) {
 		rt.showFPS = !rt.showFPS
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyF12) {
+		if ebiten.CursorMode() == ebiten.CursorModeVisible {
+			ebiten.SetCursorMode(ebiten.CursorModeHidden)
+		} else {
+			ebiten.SetCursorMode(ebiten.CursorModeVisible)
+		}
+	}
 
 	x, y := ebiten.CursorPosition()
 	rt.cart.Memory().WriteByte(MemMouseX, byte(x))
