@@ -21,8 +21,9 @@ func (rt *Runtime) traceUtf8(_ context.Context, mod api.Module, params []uint64)
 	byteLength := int32(params[1])
 
 	/* message */
-	message := string(readBytes(mod, str, byteLength))
-	log.Println(message)
+	if message, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); ok {
+		log.Printf("%s", message)
+	}
 }
 
 // traceUtf16 prints a message to the debug console from a UTF-16 encoded
@@ -32,8 +33,9 @@ func (rt *Runtime) traceUtf16(_ context.Context, mod api.Module, params []uint64
 	byteLength := int32(params[1])
 
 	/* message */
-	message := DecodeUTF16(readBytes(mod, str, byteLength))
-	log.Println(message)
+	if message, ok := mod.Memory().Read(uint32(str), uint32(byteLength)); ok {
+		log.Printf("%s", message)
+	}
 }
 
 // tracef prints a message to the debug console from the following input:

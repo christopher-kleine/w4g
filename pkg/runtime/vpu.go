@@ -264,14 +264,15 @@ func (vpu *VPU) unclippedPoint(colorIndex byte, x, y int32) {
 	}
 }
 
-func (vpu *VPU) Text(txt string, x, y int32) {
+func (vpu *VPU) Text(txt []byte, x, y int32) {
+	if len(txt) == 0 {
+		return
+	}
+
 	currX := x
 	currY := y
-	for _, letter := range []byte(txt) {
-		// for _, l := range txt {
-		// letter := l
+	for _, letter := range txt {
 		l := int32(letter)
-		//log.Printf("letter: %v / %c / %v / %c", letter, letter, l, l)
 		switch letter {
 		case 0:
 			return
