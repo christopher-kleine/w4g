@@ -48,7 +48,7 @@ func (rt *Runtime) blitFB(sprite []byte, x, y, width, height, srcX, srcY, stride
 	flipY := flags&4 == 4
 	rotate := flags&8 == 8
 
-	rt.VPU.BlitFB(sprite, x, y, width, height, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
+	rt.VPU.Blit(sprite, x, y, width, height, srcX, srcY, stride, bpp2, flipX, flipY, rotate)
 }
 
 // line draws a line between two points.
@@ -58,11 +58,11 @@ func (rt *Runtime) line(_ context.Context, params []uint64) {
 	x2 := int32(params[2])
 	y2 := int32(params[3])
 
-	dc0 := rt.VPU.GetColorByIndex(0)
+	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
-	rt.VPU.LineFB(dc0, x1, y1, x2, y2)
+	rt.VPU.Line(dc0, x1, y1, x2, y2)
 }
 
 // hline draws a horizontal line.
@@ -71,12 +71,12 @@ func (rt *Runtime) hline(_ context.Context, params []uint64) {
 	y := int32(params[1])
 	len := int32(params[2])
 
-	dc0 := rt.VPU.GetColorByIndex(0)
+	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
 	strokeColor := (dc0 - 1) & 0x3
-	rt.VPU.HLineUnclippedFB(strokeColor, x, y, len)
+	rt.VPU.unclippedHLine(strokeColor, x, y, len)
 }
 
 // vline draws a vertical line.
@@ -85,12 +85,12 @@ func (rt *Runtime) vline(_ context.Context, params []uint64) {
 	y := int32(params[1])
 	len := int32(params[2])
 
-	dc0 := rt.VPU.GetColorByIndex(0)
+	dc0 := rt.GetColorByIndex(0)
 	if dc0 == 0 {
 		return
 	}
-	strokeColor := (dc0 - 1) & 0x3
-	rt.VPU.VLineFB(strokeColor, x, y, len)
+	// strokeColor := (dc0 - 1) & 0x3
+	rt.VPU.VLine(dc0, x, y, len)
 }
 
 // oval draws an oval (or circle).
@@ -100,7 +100,10 @@ func (rt *Runtime) oval(_ context.Context, params []uint64) {
 	width := int32(params[2])
 	height := int32(params[3])
 
-	rt.VPU.OvalFB(x, y, width, height)
+	fillColor := rt.GetColorByIndex(0)
+	strokeColor := rt.GetColorByIndex(1)
+
+	rt.VPU.Oval(x, y, width, height, fillColor, strokeColor)
 }
 
 // rect draws a rectangle.
@@ -110,7 +113,10 @@ func (rt *Runtime) rect(_ context.Context, params []uint64) {
 	width := int32(params[2])
 	height := int32(params[3])
 
-	rt.VPU.RectFB(x, y, width, height)
+	fillColor := rt.GetColorByIndex(0)
+	strokeColor := rt.GetColorByIndex(1)
+
+	rt.VPU.Rect(x, y, width, height, fillColor, strokeColor)
 }
 
 // text draws text using the built-in system font from a *zero-terminated*
@@ -120,7 +126,7 @@ func (rt *Runtime) text(_ context.Context, mod api.Module, params []uint64) {
 	x := int32(params[1])
 	y := int32(params[2])
 
-	rt.VPU.TextFB(getString(mod.Memory(), str), x, y)
+	rt.VPU.Text(getString(mod.Memory(), str), x, y)
 }
 
 // textUtf8 draws text using the built-in system font from a UTF-8 encoded
@@ -133,7 +139,7 @@ func (rt *Runtime) textUtf8(_ context.Context, mod api.Module, params []uint64) 
 
 	s := readBytes(mod, str, byteLength)
 
-	rt.VPU.TextFB(string(s), x, y)
+	rt.VPU.Text(string(s), x, y)
 }
 
 // textUtf16 draws text using the built-in system font from a UTF-16 encoded
@@ -147,7 +153,7 @@ func (rt *Runtime) textUtf16(_ context.Context, mod api.Module, params []uint64)
 	s := readBytes(mod, str, byteLength)
 	text := DecodeUTF16(s)
 
-	rt.VPU.TextFB(text, x, y)
+	rt.VPU.Text(text, x, y)
 }
 
 func DecodeUTF16(b []byte) string {
@@ -173,6 +179,23 @@ func DecodeUTF16(b []byte) string {
 	}
 
 	return ret.String()
+}
+
+func (rt *Runtime) GetColorByIndex(index int) byte {
+	drawColors, _ := rt.cart.Memory().Read(MemDrawColors, SizeDrawColors)
+	switch index {
+	case 0:
+		return drawColors[0] & 0xf
+
+	case 1:
+		return (drawColors[0] >> 4) & 0xf
+
+	case 2:
+		return drawColors[1] & 0xf
+
+	default:
+		return (drawColors[2] >> 4) & 0xf0
+	}
 }
 
 func getString(mem api.Memory, txt int32) string {

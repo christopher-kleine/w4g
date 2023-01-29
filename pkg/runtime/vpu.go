@@ -66,7 +66,7 @@ func (vpu *VPU) Clear() {
 	}
 }
 
-func (vpu *VPU) RenderFB(screen *ebiten.Image) {
+func (vpu *VPU) Render(screen *ebiten.Image) {
 	palette, _ := vpu.Memory().Read(MemPalette, SizePalette)
 	colors := []color.Color{
 		color.RGBA{
@@ -113,7 +113,7 @@ func (vpu *VPU) RenderFB(screen *ebiten.Image) {
 	}
 }
 
-func (vpu *VPU) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
+func (vpu *VPU) Blit(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32, bpp2, flipX, flipY, rotate bool) {
 	drawColors, _ := vpu.Memory().Read(MemDrawColors, SizeDrawColors)
 
 	var (
@@ -162,30 +162,13 @@ func (vpu *VPU) BlitFB(sprite []byte, dstX, dstY, w, h, srcX, srcY, stride int32
 
 			dc = uint8((colors >> (colorIdx << 2)) & 0x0f)
 			if dc != 0 {
-				vpu.PointUnclippedFB(dc-1, tx, ty)
+				vpu.unclippedPoint(dc-1, tx, ty)
 			}
 		}
 	}
 }
 
-func (vpu *VPU) GetColorByIndex(index int) byte {
-	drawColors, _ := vpu.Memory().Read(MemDrawColors, SizeDrawColors)
-	switch index {
-	case 0:
-		return drawColors[0] & 0xf
-
-	case 1:
-		return (drawColors[0] >> 4) & 0xf
-
-	case 2:
-		return drawColors[1] & 0xf
-
-	default:
-		return (drawColors[2] >> 4) & 0xf0
-	}
-}
-
-func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
+func (vpu *VPU) Line(color byte, x1, y1, x2, y2 int32) {
 	if color == 0 {
 		return
 	}
@@ -208,7 +191,7 @@ func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
 	var e2 int32
 
 	for {
-		vpu.PointUnclippedFB(color, x1, y1)
+		vpu.unclippedPoint(color, x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}
@@ -224,48 +207,16 @@ func (vpu *VPU) LineFB(color byte, x1, y1, x2, y2 int32) {
 	}
 }
 
-func (vpu *VPU) HLineFB(color byte, startX, y, len int32) {
-	// endX := startX + len
-
+func (vpu *VPU) HLine(color byte, startX, y, len int32) {
 	if color == 0 {
 		return
 	}
 
-	vpu.HLineUnclippedFB(color-1, startX, y, startX+len)
+	vpu.unclippedHLine(color-1, startX, y, startX+len)
 
-	// // Make sure it's from left to right
-	// if startX > endX {
-	// 	startX, endX = endX, startX
-	// }
-
-	// // Is the line even visible?
-	// if y >= HEIGHT || y < 0 {
-	// 	return
-	// }
-	// if endX < 0 || startX >= WIDTH {
-	// 	return
-	// }
-
-	// // Stay in bound
-	// if endX > 159 {
-	// 	endX = 159
-	// }
-	// if endX < 0 {
-	// 	endX = 0
-	// }
-	// if startX > 159 {
-	// 	startX = 159
-	// }
-	// if startX < 0 {
-	// 	startX = 0
-	// }
-
-	// for x := startX; x < endX; x++ {
-	// 	vpu.PointFB(color, x, y)
-	// }
 }
 
-func (vpu *VPU) HLineUnclippedFB(color byte, startX, y, endX int32) {
+func (vpu *VPU) unclippedHLine(color byte, startX, y, endX int32) {
 	if y >= 0 && y < HEIGHT {
 		if startX < 0 {
 			startX = 0
@@ -277,25 +228,26 @@ func (vpu *VPU) HLineUnclippedFB(color byte, startX, y, endX int32) {
 
 		if startX < endX {
 			for x := startX; x < endX; x++ {
-				vpu.PointUnclippedFB(color, x, y)
+				vpu.unclippedPoint(color, x, y)
 			}
 		}
 	}
 }
 
-func (vpu *VPU) VLineFB(color byte, x, y, len int32) {
+func (vpu *VPU) VLine(color byte, x, y, len int32) {
 	if y+len <= 0 || x < 0 || x >= WIDTH || color == 0 {
 		return
 	}
 
 	startY := tools.Max(0, y)
 	endY := tools.Min(HEIGHT, y+len)
+	color--
 	for yy := startY; yy < endY; yy++ {
-		vpu.PointFB(color, x, yy)
+		vpu.point(color, x, yy)
 	}
 }
 
-func (vpu *VPU) PointFB(color byte, x, y int32) {
+func (vpu *VPU) point(color byte, x, y int32) {
 	var (
 		idx             int32 = (y*HEIGHT + x) >> 2
 		currentValue, _       = vpu.Memory().ReadByte(uint32(idx) + MemFramebuffer)
@@ -306,13 +258,13 @@ func (vpu *VPU) PointFB(color byte, x, y int32) {
 	vpu.Memory().WriteByte(uint32(idx)+MemFramebuffer, value)
 }
 
-func (vpu *VPU) PointUnclippedFB(colorIndex byte, x, y int32) {
+func (vpu *VPU) unclippedPoint(colorIndex byte, x, y int32) {
 	if x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT {
-		vpu.PointFB(colorIndex, x, y)
+		vpu.point(colorIndex, x, y)
 	}
 }
 
-func (vpu *VPU) TextFB(txt string, x, y int32) {
+func (vpu *VPU) Text(txt string, x, y int32) {
 	currX := x
 	currY := y
 	for _, letter := range []byte(txt) {
@@ -329,22 +281,21 @@ func (vpu *VPU) TextFB(txt string, x, y int32) {
 			currY += 8
 
 		default:
-			vpu.BlitFB(font, currX, currY, 8, 8, 0, (l-32)<<3, 8, false, false, false, false)
+			vpu.Blit(font, currX, currY, 8, 8, 0, (l-32)<<3, 8, false, false, false, false)
 			currX += 8
 		}
 	}
 }
 
-func (vpu *VPU) OvalFB(x, y, width, height int32) {
-	dc0 := vpu.GetColorByIndex(0)
-	dc1 := vpu.GetColorByIndex(1)
-
-	if dc1 == 0xf {
+func (vpu *VPU) Oval(x, y, width, height int32, fillColor, strokeColor byte) {
+	if strokeColor == 0xf {
 		return
 	}
 
-	strokeColor := (dc1 - 1) & 0x3
-	fillColor := (dc0 - 1) & 0x3
+	dc0 := fillColor
+
+	strokeColor = (strokeColor - 1) & 0x3
+	fillColor = (fillColor - 1) & 0x3
 
 	a := width - 1
 	b := height - 1
@@ -369,17 +320,17 @@ func (vpu *VPU) OvalFB(x, y, width, height int32) {
 	var err2 int32
 
 	for {
-		vpu.PointUnclippedFB(strokeColor, east, north)
-		vpu.PointUnclippedFB(strokeColor, west, north)
-		vpu.PointUnclippedFB(strokeColor, west, south)
-		vpu.PointUnclippedFB(strokeColor, east, south)
+		vpu.unclippedPoint(strokeColor, east, north)
+		vpu.unclippedPoint(strokeColor, west, north)
+		vpu.unclippedPoint(strokeColor, west, south)
+		vpu.unclippedPoint(strokeColor, east, south)
 
 		start := west + 1
 		len := east - start
 
 		if dc0 != 0 && len > 0 {
-			vpu.HLineUnclippedFB(fillColor, start, north, east)
-			vpu.HLineUnclippedFB(fillColor, start, south, east)
+			vpu.unclippedHLine(fillColor, start, north, east)
+			vpu.unclippedHLine(fillColor, start, south, east)
 		}
 		err2 = 2 * err
 		if err2 <= dy {
@@ -404,16 +355,16 @@ func (vpu *VPU) OvalFB(x, y, width, height int32) {
 
 	// Make sure north and south have moved the entire way so top/bottom aren't missing
 	for north-south < height {
-		vpu.PointUnclippedFB(strokeColor, west-1, north) /*   II. Quadrant    */
-		vpu.PointUnclippedFB(strokeColor, east+1, north) /*   I. Quadrant     */
+		vpu.unclippedPoint(strokeColor, west-1, north) /*   II. Quadrant    */
+		vpu.unclippedPoint(strokeColor, east+1, north) /*   I. Quadrant     */
 		north += 1
-		vpu.PointUnclippedFB(strokeColor, west-1, south) /*   III. Quadrant   */
-		vpu.PointUnclippedFB(strokeColor, east+1, south) /*   IV. Quadrant    */
+		vpu.unclippedPoint(strokeColor, west-1, south) /*   III. Quadrant   */
+		vpu.unclippedPoint(strokeColor, east+1, south) /*   IV. Quadrant    */
 		south -= 1
 	}
 }
 
-func (vpu *VPU) RectFB(x, y, width, height int32) {
+func (vpu *VPU) Rect(x, y, width, height int32, fillColor, strokeColor byte) {
 	startX := tools.Max(0, x)
 	startY := tools.Max(0, y)
 	endXUnclamp := x + width
@@ -421,46 +372,46 @@ func (vpu *VPU) RectFB(x, y, width, height int32) {
 	endX := tools.Min(WIDTH, endXUnclamp)
 	endY := tools.Min(HEIGHT, endYUnclamp)
 
-	dc0 := vpu.GetColorByIndex(0)
-	dc1 := vpu.GetColorByIndex(1)
+	// dc0 := vpu.GetColorByIndex(0)
+	// dc1 := vpu.GetColorByIndex(1)
 
-	if dc0 != 0 {
-		dc0 = (dc0 - 1) & 0x3
+	if fillColor != 0 {
+		fillColor = (fillColor - 1) & 0x3
 		for yy := startY; yy < endY; yy++ {
 			for xx := startX; xx < endX; xx++ {
-				vpu.PointFB(dc0, xx, yy)
+				vpu.point(fillColor, xx, yy)
 			}
 		}
 	}
 
-	if dc1 != 0 {
-		dc1 = (dc1 - 1) & 0x3
+	if strokeColor != 0 {
+		strokeColor = (strokeColor - 1) & 0x3
 
 		// Left edge
 		if x >= 0 && x < WIDTH {
 			for yy := startY; yy < endY; yy++ {
-				vpu.PointFB(dc1, x, yy)
+				vpu.point(strokeColor, x, yy)
 			}
 		}
 
 		// Right edge
 		if endXUnclamp > 0 && endXUnclamp <= WIDTH {
 			for yy := startY; yy < endY; yy++ {
-				vpu.PointFB(dc1, endXUnclamp-1, yy)
+				vpu.point(strokeColor, endXUnclamp-1, yy)
 			}
 		}
 
 		// Top edge
 		if y >= 0 && y < HEIGHT {
 			for xx := startX; xx < endX; xx++ {
-				vpu.PointFB(dc1, xx, y)
+				vpu.point(strokeColor, xx, y)
 			}
 		}
 
 		// Bottom edge
 		if endYUnclamp > 0 && endYUnclamp <= HEIGHT {
 			for xx := startX; xx < endX; xx++ {
-				vpu.PointFB(dc1, xx, endYUnclamp-1)
+				vpu.point(strokeColor, xx, endYUnclamp-1)
 			}
 		}
 	}

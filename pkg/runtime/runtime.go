@@ -253,7 +253,7 @@ func (rt *Runtime) Screenshot(screen *ebiten.Image) {
 }
 
 func (rt *Runtime) Draw(screen *ebiten.Image) {
-	rt.VPU.RenderFB(screen)
+	rt.VPU.Render(screen)
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyF9) {
 		rt.Screenshot(screen)
