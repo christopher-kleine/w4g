@@ -6,10 +6,9 @@ require (
 	github.com/christopher-kleine/lorca v0.1.11-0.20220529163957-708fc256dcb5
 	github.com/christopher-kleine/mjpeg v0.0.0
 	github.com/hajimehoshi/ebiten/v2 v2.3.5
-	github.com/tetratelabs/wazero v1.0.0-pre.7
+	github.com/tetratelabs/wazero v1.0.1
 	github.com/urfave/cli/v2 v2.10.3
 	golang.org/x/exp v0.0.0-20220613132600-b0d781184e0d
-	golang.org/x/text v0.3.7
 )
 
 require (
