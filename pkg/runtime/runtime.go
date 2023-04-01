@@ -164,14 +164,14 @@ func NewRuntime(showFPS bool) (*Runtime, error) {
 		WithGoModuleFunction(api.GoModuleFunc(result.tracef), []api.ValueType{i32, i32}, []api.ValueType{}).
 		WithParameterNames("str", "byteLength").
 		Export("tracef").
-		Instantiate(result.ctx, result.runtime)
+		Instantiate(result.ctx)
 
 	if err != nil {
 		result.runtime.Close(result.ctx)
 		return nil, err
 	}
 
-	_, err = result.runtime.InstantiateModuleFromBinary(result.ctx, envWasm)
+	_, err = result.runtime.Instantiate(result.ctx, envWasm)
 
 	if err != nil {
 		result.runtime.Close(result.ctx)
@@ -189,7 +189,7 @@ func (rt *Runtime) LoadCart(code []byte, name string) error {
 	rt.Storage = NewStorage(strings.TrimSuffix(name, filepath.Ext(name)) + ".disk")
 	rt.APU = &APU{}
 
-	rt.cart, err = rt.runtime.InstantiateModuleFromBinary(rt.ctx, code)
+	rt.cart, err = rt.runtime.Instantiate(rt.ctx, code)
 	if err != nil {
 		return err
 	}
